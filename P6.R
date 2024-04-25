@@ -7,6 +7,9 @@ library(moments)
 library(forecast)
 library(vars)
 library(ggfortify)
+library(tseries)
+library(urca)
+#library(fpp2)
 
 # Fetch data for elctiricity prices
 elecprices <- GET("https://api.energidataservice.dk/dataset/Elspotprices?limit=1000000&start=2015-01-01T00:00&end=2019-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
@@ -44,9 +47,8 @@ daily_cons_means <- Consumption %>%
   group_by(day) %>%
   summarise(DailyConsumption = mean(GrossConsumptionMWh, na.rm = TRUE))
 
-#taking the log of every entry in daily_cons_means
-logged_daily_cons_means <- daily_cons_means %>%
-  mutate(LoggedConsumption = log(DailyConsumption))
+# Creating a scatterplot with both df to be done
+#ggplot()
 
 #########################################################################
 # Now, daily_means is our new dataframe with the mean price for each week
@@ -56,44 +58,50 @@ price_ts <- ts(daily_price_means$MeanPrice,frequency = 365,
                              start = c(2015, which(day(ymd("2015-01-01")) == 
                                                      daily_price_means$day[1])))
 plot(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Electricity Prices, 2015-2019")
+ggtsdisplay(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Spot prices, 2015-2019")
 
 #Making time series of consumption
 consumption_ts <- ts(daily_cons_means$DailyConsumption, frequency = 365, 
                start = c(2015, which(day(ymd("2015-01-01")) == 
                                        daily_cons_means$day[1])))
-plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2020")
+plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2019")
+ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2019")
 
 #constructing ts of logged consumption 
-logged_consumption_ts <- ts(logged_daily_cons_means$LoggedConsumption, frequency = 365, 
-                            start = c(2015, which(day(ymd("2015-01-01")) == 
-                                                    logged_daily_cons_means$day[1])))
-plot(logged_consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2020")
+logged_consumption_ts <- log(consumption_ts)
+ggtsdisplay(logged_consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2019")
+
+#autoplot the ts together
+autoplot(cbind(price_ts, consumption_ts))
 
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
 Acf(price_ts, lag.max = 30)
 Acf(consumption_ts, lag.max = 30)
-Acf(logged_consumption_ts, lag.max = 365)
-#Acf(total_ts)
+Acf(logged_consumption_ts, lag.max = 30)
 
-#multibel linear regression
+### 
+# Performing ADF tests on them all
+adf_pricets <- ur.df(price_ts, type = "drift", lags = 1)
+summary(adf_pricets)
+adf_consts <- ur.df(consumption_ts, type = "drift", lags = 1)
+summary(adf_consts)
 
 ####################################
-#Decomposition of each ts
+# Decomposition of each ts
 # Decomposition of price time series
 decomposition_price <- stl(price_ts, s.window = "periodic")
 autoplot(decomposition_price, ts.colour = "darkblue") + ggtitle("Decomposition of Spot Prices")
 
 # Extract residuals
-residuals_price <- decomposition_price$time.series[, "remainder"]
+residuals_pricets <- decomposition_price$time.series[, "remainder"]
 
 # Plot ACF and PACF of residuals
-Acf(residuals_price, lag.max = 30)
-Pacf(residuals_price, lag.max = 30)
+Acf(residuals_pricets, lag.max = 30)
+Pacf(residuals_pricets, lag.max = 30)
+ggtsdisplay(residuals_pricets)
 
-de_de_residuals_price <- stl(residuals_price, s.window = "periodic")
-autoplot(de_de_residuals_price)
-
+###
 #Decomposition of consumption
 de_consump <- stl(consumption_ts, s.window = "periodic")
 autoplot(de_consump, ts.colour = "darkblue") + ggtitle("Decomposition of Gross Consumption")
@@ -101,16 +109,12 @@ autoplot(de_consump, ts.colour = "darkblue") + ggtitle("Decomposition of Gross C
 # Extract residuals
 residuals_cons <- de_consump$time.series[, "remainder"]
 
-de_de_residuals_cons <- stl(residuals_cons, s.window = "periodic")
-autoplot(de_de_residuals_cons)
-
-Acf(de_de_residuals_cons$time.series[, "remainder"], lag.max = 30)
-
 # Plot ACF and PACF of residuals
-Acf(residuals_cons, lag.max = 365)
-acf(residuals_cons)
+Acf(residuals_cons, lag.max = 30)
 Pacf(residuals_cons, lag.max = 30)
+ggtsdisplay(residuals_cons, lag.max = 90)
 
+###
 #Decomposition of logged consumption
 de_logcons <- stl(logged_consumption_ts, s.window = "periodic")
 autoplot(de_logcons, ts.colour = "darkblue") + ggtitle("Decomposition of Gross Consumption")
@@ -120,14 +124,16 @@ residuals_logcons <- de_logcons$time.series[, "remainder"]
 
 # Plot ACF and PACF of residuals
 Acf(residuals_logcons, lag.max = 20)
+ggtsdisplay(residuals_logcons)
 
-#######################
-#deseasonalize price_ts
+#######################################################################
+#deseasonalize the ts' first with price
+ndiffs(price_ts)
+nsdiffs(price_ts)
+#Reveal that differencing 1 time might be a good idea.
+
 diff_price_ts <- diff(price_ts)
-autoplot(diff_price_ts)
-
-diff_diff_price_ts <- diff(diff_price_ts)
-autoplot(diff_diff_price_ts)
+ggtsdisplay(diff_price_ts)
 
 adf_test <- ur.df(diff_price_ts)
 summary(adf_test)
@@ -135,78 +141,125 @@ summary(adf_test)
 Acf(diff_price_ts)
 Pacf(diff_price_ts)
 
-Acf(diff_diff_price_ts)
-Pacf(diff_diff_price_ts)
+###
+#for consumption
+ndiffs(consumption_ts)
+nsdiffs(consumption_ts)
+#tests reveal, differencing wont help
 
-adf_test2 <- ur.df(diff_diff_price_ts)
-summary(adf_test2)
+###
+# For log consumption
+ndiffs(logged_consumption_ts)
+nsdiffs(logged_consumption_ts)
+#Same as normal consumption
 
 #################################
-#making for loop for differencing
-diff_test_price <- diff(price_ts)
-for (i in 1:10){
-  diff_test_price <- diff(diff_test_price)
-}
-Acf(diff_test_price)
+#making the time series as a linear regression where we have the time series in 2 components
+#X_t=s_t+Y_t, one is deterministic and one is stochastic
 
-#cons
-diff_test_consumption <- diff(consumption_ts)
-acf(diff_test_consumption)
-for (i in 1:10){
-  diff_test_consumption <- diff(diff_test_consumption)
-}
-Acf(diff_test_consumption, lag.max = 30)
-acf(diff_test_consumption)
-
-#making it as a linear regression where we have the time series in 2 components
-#X_t=s_t+Y_t
-
+#setting a time interval, which is just our days in the whole periode
 t <- 1:length(daily_price_means$MeanPrice)
+
+#Constructing the deterministic ts for price 
 st_price <- lm(daily_price_means$MeanPrice ~ t + sin(t*2*pi/7) + cos(t*2*pi/7) + sin(t*2*pi/30) 
                 + cos(t*2*pi/30) + sin(t*2*pi/90) + cos(t*2*pi/90) + sin(t*2*pi/180) +
                   sin(t*2*pi/365) + cos(t*2*pi/365))
+# Now for the consumption
+st_consumption <- lm(daily_cons_means$DailyConsumption ~ t + sin(t*2*pi/7) + cos(t*2*pi/7) + sin(t*2*pi/30) 
+                     + cos(t*2*pi/30) + sin(t*2*pi/90) + cos(t*2*pi/90) + sin(t*2*pi/180) +
+                       sin(t*2*pi/365) + cos(t*2*pi/365))
 
 # Generate predicted values using the linear model
-predicted_values <- fitted(st_price)
-
-
-ts.plot(st_pricets, price_ts, gpars = list(col = c("red", "blue")))
+predicted_values_prices <- fitted(st_price)
+predicted_values_consumption <- fitted(st_consumption)
 
 
 # Convert values into a time series object
-st_pricets <- ts(predicted_values,frequency = 365, 
+st_pricets <- ts(predicted_values_prices,frequency = 365, 
                  start = c(2015, which(day(ymd("2015-01-01")) == 
                                          daily_price_means$day[1])))
 
+# Convert values into a time series object
+st_consts <- ts(predicted_values_consumption,frequency = 365, 
+                 start = c(2015, which(day(ymd("2015-01-01")) == 
+                                         daily_price_means$day[1])))
+
+# Plotting both series aginst original
+ts.plot(st_pricets, price_ts, gpars = list(col = c("red", "blue")))
+ts.plot(st_consts, consumption_ts, gpars = list(col = c("red", "blue")))
+
+# Display them individualy with acf and pacf
+ggtsdisplay(st_pricets)
+ggtsdisplay(st_consts)
+
 # Subtract the predicted values from price_ts
-Adjusted_ts <- price_ts - predicted_values
+adjusted_pricets <- price_ts - predicted_values_prices
+adjusted_consumptionts <- consumption_ts - predicted_values_consumption
 
-plot(Adjusted_ts)
+# Display using ggplots
+ggtsdisplay(adjusted_pricets)
+ggtsdisplay(adjusted_consumptionts)
 
-Acf(Adjusted_ts)
-Pacf(Adjusted_ts)
+# Perform ADF test on the adjusted models
+adf_test_pricets <- ur.df(adjusted_pricets, type = "drift", lags = 1)
+summary(adf_test_pricets)
 
+# Tests for which model desribes the season and trend, run at ur own discretion
+test_price <- auto.arima(adjusted_pricets, stepwise = FALSE, approximation = FALSE, D = 1)
+test_consump <- auto.arima(adjusted_consumptionts, stepwise = FALSE, approximation = FALSE, D = 1)
 
+################################################################################
+# Creating the optimal ts given the results from the previous tests
 
-de_adj <- stl(Adjusted_ts, s.window = "periodic")
-autoplot(de_adj)
-autoplot(decomposition_price)
+###
+#We start with the price
+price_fit <- Arima(adjusted_pricets,
+                   order = c(1,1,0),
+                   seasonal = c(0,1,0))
+checkresiduals(price_fit)
 
-# Extract residuals
-residuals_adj_price <- de_adj$time.series[, "remainder"]
+price_fit %>%
+  forecast(h = 12) %>%
+  autoplot()
 
-# Plot ACF and PACF of residuals
-Acf(residuals_adj_price, lag.max = 365)
-Acf(residuals_price, lag.max = 365)
+# Extract residuals from ARIMA model
+residuals <- residuals(price_fit)
 
-#fun and stuff
+# Perform ADF test on the residuals
+adf_test <- ur.df(residuals, type = "drift", lags = 1)
+summary(adf_test)
 
-#Not needed
-#Puting them in the same dataframe
-total_df <- tibble(daily_price_means, daily_cons_means$DailyConsumption)
-colnames(total_df)[2:3] <- c("Daily Prices","Daily Consumption") 
+###
+# Then for consumption
+consumption_fit <- Arima(adjusted_consumptionts,
+                   order = c(1,1,1),
+                   seasonal = c(0,1,0))
+checkresiduals(consumption_fit)
 
-total_ts <- ts(total_df[2:3], frequency = 365, 
-               start = c(2015, which(day(ymd("2015-01-01")) == 
-                                       total_df$day[1])))
-plot(total_ts, xlab = "Year", main = "Daily Price and Consumption of Electricity, 2015-2024", col = "darkblue")
+consumption_fit %>%
+  forecast(h = 12) %>%
+  autoplot()
+
+# Extract residuals from ARIMA model
+residuals_consumption <- residuals(consumption_fit)
+
+# Perform ADF test on the residuals
+adf_test_consumption <- ur.df(residuals_consumption, type = "drift", lags = 1)
+summary(adf_test_consumption)
+
+ggtsdisplay(residuals_consumption)
+
+################################################################################
+#Cunstructing the VAR
+#firstly we test the number of p
+pricets_fit <- fitted(price_fit)
+consumptionts_fit <- fitted(consumption_fit)
+
+colle_ts <- cbind(pricets_fit , consumptionts_fit)
+
+#Selcting the number of p to include
+lag_select <- VARselect(colle_ts, lag.max = 365, type = "const")
+lag_select$selection
+
+Model1 <- VAR(colle_ts, p = 30, type = "const", season = NULL, exog = NULL)
+summary(Model1)
