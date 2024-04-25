@@ -214,7 +214,7 @@ test_consump <- auto.arima(adjusted_consumptionts, stepwise = FALSE, approximati
 ###
 #We start with the price
 price_fit <- Arima(adjusted_pricets,
-                   order = c(1,1,0),
+                   order = c(3,1,1),
                    seasonal = c(0,1,0))
 checkresiduals(price_fit)
 
@@ -232,7 +232,7 @@ summary(adf_test)
 ###
 # Then for consumption
 consumption_fit <- Arima(adjusted_consumptionts,
-                   order = c(1,1,1),
+                   order = c(5,0,0),
                    seasonal = c(0,1,0))
 checkresiduals(consumption_fit)
 
