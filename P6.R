@@ -87,6 +87,13 @@ summary(adf_pricets)
 adf_consts <- ur.df(consumption_ts, type = "drift", lags = 1)
 summary(adf_consts)
 
+adf.test(price_ts)
+adf.test(consumption_ts)
+
+#anden test type
+kpss.test(price_ts, null = "Level")
+kpss.test(price_ts, null = "Trend")
+
 ####################################
 # Decomposition of each ts
 # Decomposition of price time series
@@ -192,9 +199,19 @@ ts.plot(st_consts, consumption_ts, gpars = list(col = c("red", "blue")))
 ggtsdisplay(st_pricets)
 ggtsdisplay(st_consts)
 
+Acf(st_consts, lag.max = 90)
+
 # Subtract the predicted values from price_ts
 adjusted_pricets <- price_ts - predicted_values_prices
 adjusted_consumptionts <- consumption_ts - predicted_values_consumption
+
+ts.plot(st_pricets, price_ts, adjusted_pricets, gpars = list(col = c("red", "blue", "black")))
+ts.plot(st_consts, consumption_ts, adjusted_consumptionts, gpars = list(col = c("red", "blue", "black")))
+
+autoplot(consumption_ts, series = "cons", ylab = "hej", colour = "black") + 
+  autolayer(adjusted_consumptionts, series = "adjcons") + 
+  autolayer(st_consts, series = "adjusted")
+  
 
 # Display using ggplots
 ggtsdisplay(adjusted_pricets)
@@ -250,8 +267,8 @@ summary(adf_test_consumption)
 ggtsdisplay(residuals_consumption)
 
 ################################################################################
-#Cunstructing the VAR
-#firstly we test the number of p
+# Constructing the VAR
+# Firstly we test the number of p
 pricets_fit <- fitted(price_fit)
 consumptionts_fit <- fitted(consumption_fit)
 
@@ -261,5 +278,80 @@ colle_ts <- cbind(pricets_fit , consumptionts_fit)
 lag_select <- VARselect(colle_ts, lag.max = 365, type = "const")
 lag_select$selection
 
-Model1 <- VAR(colle_ts, p = 30, type = "const", season = NULL, exog = NULL)
+Model1 <- VAR(colle_ts, p = 29, type = "const", season = NULL, exog = NULL)
 summary(Model1)
+
+res_var <- residuals(Model1)
+
+adf_test_var <- ur.df(res_var[,1], type = "none", lags = 29)
+adf.test(res_var[,1])
+
+summary(adf_test_var)
+
+################################################################################
+#Making predictions using the VAR(29) model we have constructed
+
+# Forecast future values
+forecast_values <- predict(Model1, n.ahead = 30)  # Change 10 to the number of periods you want to forecast ahead
+
+# Plot the forecasted values, zooming in on the last part
+plot(forecast_values, xlim = c(2018.8, 2019.2))  
+autoplot(forecast_values, xlim = c(2018.9, 2019.1))
+
+################################################################################
+# Fething data ones again cus we are rookies at programming.
+# Fetch data for elctiricity prices
+elecprices_fut <- GET("https://api.energidataservice.dk/dataset/Elspotprices?limit=1000000&start=2015-01-01T00:00&end=2020-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
+elpriccontent_fut <- content(elecprices_fut, as = "text")
+
+# Parse JSON content
+strjson_fut <- fromJSON(elpriccontent_fut)
+
+# Convert to data frame
+Elpriser_fut <- strjson_fut$records
+
+# Adjusting the hours to represent readable dates and hours.
+Elpriser_fut$HourDK <- ymd_hms(Elpriser_fut$HourDK)
+
+# Add a column that indicates the daily number
+Elpriser_fut$day <- floor_date(Elpriser_fut$HourDK, "day")
+
+# Group by days and calculate the daily mean
+daily_price_means_fut <- Elpriser_fut %>%
+  group_by(day) %>%
+  summarise(MeanPrice = mean(SpotPriceDKK, na.rm = TRUE))
+
+#We can now do the same for consumption, where we will end up with a dataframe with both data
+#Fetching consumtion datasheet
+consump_fut <- GET("https://api.energidataservice.dk/dataset/ProductionConsumptionSettlement?limit=1000000&start=2015-01-01T00:00&end=2020-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
+consumpcontent_fut <- content(consump_fut, as = "text")
+
+constrjson_fut <- fromJSON(consumpcontent_fut)
+Consumption_fut <- constrjson_fut$records
+
+Consumption_fut$HourDK <- ymd_hms(Consumption_fut$HourDK)
+Consumption_fut$day <- floor_date(Consumption_fut$HourDK, "day")
+
+daily_cons_means_fut <- Consumption_fut %>%
+  group_by(day) %>%
+  summarise(DailyConsumption = mean(GrossConsumptionMWh, na.rm = TRUE))
+
+###
+daily_price_means_fut_ts <- ts(daily_price_means_fut$MeanPrice,frequency = 365, 
+                               start = c(2015, which(day(ymd("2015-01-01")) == 
+                                                       daily_price_means_fut$day[1])))
+
+daily_cons_means_fut_ts <- ts(daily_cons_means_fut$DailyConsumption, frequency = 365, 
+                              start = c(2015, which(day(ymd("2015-01-01")) == 
+                                                      daily_cons_means_fut$day[1])))
+
+
+observed <- cbind(daily_price_means_fut_ts, daily_cons_means_fut_ts)
+obs_lag_select <- VARselect(observed, lag.max = 365, type = "const")
+obs_lag_select$selection
+
+
+plot(daily_price_means_fut, xlim = c(2018, 2019))
+
+#observed <- observed[, -which(names(observed) == "day")[2]]
+
