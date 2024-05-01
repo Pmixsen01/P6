@@ -9,10 +9,11 @@ library(vars)
 library(ggfortify)
 library(tseries)
 library(urca)
+library(ggpubr)
 #library(fpp2)
 
 # Fetch data for elctiricity prices
-elecprices <- GET("https://api.energidataservice.dk/dataset/Elspotprices?limit=1000000&start=2015-01-01T00:00&end=2020-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
+elecprices <- GET("https://api.energidataservice.dk/dataset/Elspotprices?limit=1000000&start=2015-01-01T00:00&end=2021-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
 elpriccontent <- content(elecprices, as = "text")
 
 # Parse JSON content
@@ -33,13 +34,14 @@ daily_price_means <- Elpriser %>%
   summarise(MeanPrice = mean(SpotPriceDKK, na.rm = TRUE))
 
 # Splitting spotprices into training and testing sets
-training_data_price <- subset(daily_price_means, day < as.Date("2019-01-01"))
-testing_data_price <- subset(daily_price_means, day >= as.Date("2019-01-01"))
+training_data_price <- subset(daily_price_means, day < as.Date("2020-01-01"))
+testing_data_price <- subset(daily_price_means, day >= as.Date("2020-01-01"))
 
 
 #We can now do the same for consumption, where we will end up with a dataframe with both data
 #Fetching consumtion datasheet
-consump <- GET("https://api.energidataservice.dk/dataset/ProductionConsumptionSettlement?limit=1000000&start=2015-01-01T00:00&end=2020-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
+consump <- GET("https://api.energidataservice.dk/dataset/ProductionConsumptionSettlement?limit=1000000&start=2015-01-01T00:00&end=2021-01-01T00:00&filter={\"PriceArea\":\"DK1\"}")
+
 consumpcontent <- content(consump, as = "text")
 
 constrjson <- fromJSON(consumpcontent)
@@ -53,8 +55,8 @@ daily_cons_means <- Consumption %>%
   summarise(DailyConsumption = mean(GrossConsumptionMWh, na.rm = TRUE))
 
 # Splitting consumption into training and testing sets
-training_data_consumption <- subset(daily_cons_means, day < as.Date("2019-01-01"))
-testing_data_consumption <- subset(daily_cons_means, day >= as.Date("2019-01-01"))
+training_data_consumption <- subset(daily_cons_means, day < as.Date("2020-01-01"))
+testing_data_consumption <- subset(daily_cons_means, day >= as.Date("2020-01-01"))
 
 
 # Creating a scatterplot with both df to be done
@@ -67,24 +69,26 @@ testing_data_consumption <- subset(daily_cons_means, day >= as.Date("2019-01-01"
 price_ts <- ts(training_data_price$MeanPrice,frequency = 365, 
                start = c(2015, which(day(ymd("2015-01-01")) == 
                                        training_data_price$day[1])))
-plot(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Electricity Prices, 2015-2019")
-ggtsdisplay(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Spot prices, 2015-2019")
+plot(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Electricity Prices, 2015-2020")
+ggtsdisplay(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Spot price from 2015 through 2019")
 
 #Making time series of consumption
 consumption_ts <- ts(training_data_consumption$DailyConsumption, frequency = 365, 
                      start = c(2015, which(day(ymd("2015-01-01")) == 
                                              training_data_consumption$day[1])))
-plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2019")
-ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity, 2015-2019")
+plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2020")
+ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2015 through 2019")
 
 #autoplot the ts together
 autoplot(cbind(price_ts, consumption_ts))
 
+
+stability()
+
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
-Acf(price_ts, lag.max = 30)
-Acf(consumption_ts, lag.max = 30)
-Acf(logged_consumption_ts, lag.max = 30)
+Acf(price_ts, lag.max = 60, main = "ACF of spot prices with lag 60")
+Acf(consumption_ts, lag.max = 60, main = "ACF of gross consumption with lag 60")
 
 ### 
 # Performing ADF tests on them all
@@ -129,10 +133,16 @@ autoplot(de_consump, ts.colour = "darkblue") + ggtitle("Decomposition of Gross C
 # Extract residuals
 residuals_cons <- de_consump$time.series[, "remainder"]
 
-# Plot ACF and PACF of residuals
-Acf(residuals_cons, lag.max = 30)
-Pacf(residuals_cons, lag.max = 30)
-ggtsdisplay(residuals_cons, lag.max = 90)
+#MSTL
+msts <- msts(price_ts, seasonal.periods = c(7, 365))
+
+mstl <- mstl(msts)
+
+autoplot(mstl)
+
+cmsts <- msts(consumption_ts, seasonal.periods = c(7, 365))
+cmstl <- mstl(cmsts)
+autoplot(cmstl)
 
 #######################################################################
 #deseasonalize the ts' first with price
@@ -148,18 +158,7 @@ summary(adf_test)
 
 Acf(diff_price_ts)
 Pacf(diff_price_ts)
-
-###
-#for consumption
-ndiffs(consumption_ts)
-nsdiffs(consumption_ts)
 #tests reveal, differencing wont help
-
-###
-# For log consumption
-ndiffs(logged_consumption_ts)
-nsdiffs(logged_consumption_ts)
-#Same as normal consumption
 
 #################################
 #making the time series as a linear regression where we have the time series in 2 components
@@ -279,6 +278,11 @@ Acf(res_consumption, lag.max = 30)
 autoplot(consumption_ts, series = "consumption_ts") + autolayer(res_consumption, series = "res_cons") + 
   autolayer(consumptionts_fit, series = "fitted consumption")
 
+#making the ggtsdisplays
+ggtsdisplay(res_price, main = "Cleaned spot price model")
+ggtsdisplay(res_consumption, main = "Cleaned consumption model")
+
+#crafting the collected ts to make the var model
 colle_ts <- cbind(pricets_fit , consumptionts_fit)
 
 #Selcting the number of p to include
@@ -286,27 +290,46 @@ lag_select <- VARselect(colle_ts, lag.max = 365, type = "const")
 lag_select$selection
 
 Model1 <- VAR(colle_ts, p = 7, type = "const", season = NULL, exog = NULL)
+restricted_model <- restrict(Model1)
+
+#summary
 summary(Model1)
+summary(restricted_model)
 
 res_var <- residuals(Model1)
 Acf(res_var)
 
-adf_test_var <- ur.df(res_var[,1], type = "none", lags = 29)
-adf.test(res_var[,1])
+#Checking the residuals of each ts in the var
+Acf(Model1$varresult$pricets_fit$residuals)
+Acf(Model1$varresult$consumptionts_fit$residuals)
+#restricted model
+Acf(restricted_model$varresult$pricets_fit$residuals, lag.max = 90)
+Acf(restricted_model$varresult$consumptionts_fit$residuals, lag.max = 90)
 
-summary(adf_test_var)
+#Checking nomality of the residuals
+ggqqplot(Model1$varresult$pricets_fit$residuals)
+ggqqplot(Model1$varresult$consumptionts_fit$residuals)
+#restricted
+ggqqplot(restricted_model$varresult$pricets_fit$residuals)
+ggqqplot(restricted_model$varresult$consumptionts_fit$residuals)
+#shapiro test
+shapiro.test(Model1$varresult$pricets_fit$residuals)
+shapiro.test(restricted_model$varresult$consumptionts_fit$residuals)
+
+Acf(Model1$varresult$pricets_fit$residuals)
+Acf(Model1$varresult$consumptionts_fit$residuals)
+
 
 ################################################################################
-#Making predictions using the VAR(29) model we have constructed
+#Making predictions using the VAR(7) model we have constructed
 # Forecast future values
 forecast_values <- predict(Model1, n.ahead = 365)  
 
 # Plot the forecasted values, zooming in on the last part
-plot(forecast_values, xlim = c(2018.8, 2019.2))  
-autoplot(forecast_values, xlim = c(2018.8, 2019.1))
+autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 
 # Assuming 'Model1' is your fitted VAR model
-# 'n.ahead' is the number of periods you want to forecast
+# 'n.ahead' is the number of periods you want to forecast 
 n.ahead <- nrow(testing_data_price)
 
 # Generate predictions
@@ -329,16 +352,44 @@ lines(testing_data_consumption$day, forecasted_consumption, col='red')
 
 
 
-#Arons
-ts.plot(diff(consumption_ts))
-Acf(diff(consumption_ts), lag.max = 49)
+chow_test <- chow.test(Model1, SB = 1460)
+summary(chow_test)
 
-model12 <- Arima(consumption_ts, order = c(0,1,0), seasonal = list(order = c(0,1,0), period = 7))
-fitted12 <- fitted(model12)
+breakpoint_date <- as.Date("2015-01-01") + days(1460) 
+breakpoint_date
 
-res_cons <- consumption_ts - fitted12
 
-Acf(res_cons)
-autoplot(consumption_ts, series = "consumption_ts") + autolayer(res_cons, series = "res_cons")
+x1 <- stability(Model1, type = "mv-chow-test")
+plot(x1)
+ny <- chow.test(x1)
+summary(ny)
 
+
+
+
+
+
+
+# Assuming 'price_ts' is your time series object
+# Calculate the correct index positions directly, assuming daily data from the start date
+breakpoint_index <- 1356  # Observation for the breakpoint
+splitpoint_index <- 1416  # Observation for the sample split
+
+# Create the plot with vertical lines
+ggplot(data = as.data.frame(price_ts), aes(x = seq_along(price_ts), y = price_ts)) +
+  geom_line() +  # Plot the time series as a line plot
+  geom_vline(xintercept = breakpoint_index, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = splitpoint_index, color = "blue", linetype = "dashed", size = 1) +
+  xlim(c(1000, 1800)) + 
+  labs(title = "Price Time Series with Structural Breaks", x = "Time", y = "Price") +
+  theme_minimal()
+
+# Create the plot with vertical lines for consumption
+ggplot(data = as.data.frame(consumption_ts), aes(x = seq_along(consumption_ts), y = consumption_ts)) +
+  geom_line() +  # Plot the time series as a line plot
+  geom_vline(xintercept = breakpoint_index, color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = splitpoint_index, color = "blue", linetype = "dashed", size = 1) +
+  xlim(c(1000, 1800)) +
+  labs(title = "Consumption Time Series with Structural Breaks", x = "Time", y = "Price") +
+  theme_minimal()
 
