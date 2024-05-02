@@ -294,6 +294,14 @@ Acf(Model1$varresult$consumptionts_fit$residuals)
 forecast_values <- predict(Model1, n.ahead = 90)  
 forecast_valres <- predict(restricted_model, n.ahead = 90)
 
+predict <- forecast(restricted_model, h = 14, level = 95)
+predict_2 <- xts(predict$forecast$pricets_fit$mean, order.by = as.Date("2020-01-01") + 1:14)
+last_known_price <- training_data_price[nrow(training_data_price), 'MeanPrice']
+predpred <- cumsum(c(last_known_price, predict_2))
+
+forecasted_prices_original <- cumsum(c(last_known_price, forecasted_prices_stochastic))
+
+
 # Plot the forecasted values, zooming in on the last part
 autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
@@ -330,7 +338,7 @@ lines(testing_data_consumption$day, forecasted_consumption, col='red')
 n_train <- length(training_data_price$MeanPrice)
 
 # Number of forecast points for a week
-n_forecast <- 7  # If one week equals 7 days
+n_forecast <- 14  # If one week equals 7 days
 
 # New time points for forecasting
 t_forecast <- (n_train + 1):(n_train + n_forecast)
