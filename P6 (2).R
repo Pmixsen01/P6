@@ -58,10 +58,6 @@ daily_cons_means <- Consumption %>%
 training_data_consumption <- subset(daily_cons_means, day < as.Date("2020-01-01"))
 testing_data_consumption <- subset(daily_cons_means, day >= as.Date("2020-01-01"))
 
-
-# Creating a scatterplot with both df to be done
-#ggplot()
-
 #########################################################################
 # Now, daily_means is our new dataframe with the mean price for each week
 #We can now create an initial time series to check for how we want to proceed.
@@ -82,9 +78,6 @@ ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "G
 #autoplot the ts together
 autoplot(cbind(price_ts, consumption_ts))
 
-
-stability()
-
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
 Acf(price_ts, lag.max = 60, main = "ACF of spot prices with lag 60")
@@ -99,17 +92,6 @@ summary(adf_consts)
 
 adf.test(price_ts)
 adf.test(consumption_ts)
-
-#anden test type
-kpss.test(price_ts, null = "Level")
-kpss.test(price_ts, null = "Trend")
-
-#For den færdige test
-kpss.test(pricets_fit, null = "Level")
-kpss.test(pricets_fit, null = "Trend")
-kpss.test(pricets_fit, null = c("Level", "Trend"))
-
-kpss.test(consumptionts_fit, null = "Level")
 
 ####################################
 # Decomposition of each ts
@@ -211,14 +193,6 @@ price_arima <- Arima(adjusted_pricets,
                      order = c(3,1,1),
                      seasonal = list(order = c(0,1,0), period = 7))
 checkresiduals(price_arima)
-
-# Extract residuals from ARIMA model
-residuals <- residuals(price_arima)
-
-# Perform ADF test on the residuals
-adf_test <- ur.df(residuals, type = "drift", lags = 1)
-summary(adf_test)
-
 ###
 # Then for consumption
 consumption_arima <- Arima(adjusted_consumptionts,
@@ -226,18 +200,7 @@ consumption_arima <- Arima(adjusted_consumptionts,
                            seasonal = list(order = c(0,1,0), period = 7))
 checkresiduals(consumption_arima)
 
-# Extract residuals from ARIMA model
-residuals_consumption <- residuals(consumption_arima)
-
-# Perform ADF test on the residuals
-adf_test_consumption <- ur.df(residuals_consumption, type = "drift", lags = 1)
-summary(adf_test_consumption)
-
-ggtsdisplay(residuals_consumption)
-
-checkresiduals(price_arima)
-checkresiduals(consumption_arima)
-
+#fitting the values
 pricets_fit <- fitted(price_arima)
 consumptionts_fit <- fitted(consumption_arima)
 
@@ -257,17 +220,44 @@ autoplot(consumption_ts, series = "consumption_ts") + autolayer(res_consumption,
 ggtsdisplay(res_price, main = "Cleaned spot price model")
 ggtsdisplay(res_consumption, main = "Cleaned consumption model")
 
+#running kpss test
+#for original ts
+kpss.test(price_ts, null = "Level")
+kpss.test(price_ts, null = "Trend")
+
+#For the final ts
+kpss.test(pricets_fit, null = "Level")
+kpss.test(pricets_fit, null = "Trend")
+kpss.test(pricets_fit, null = c("Level", "Trend"))
+kpss.test(consumptionts_fit, null = "Level")
+
 ################################################################################
 # Constructing the VAR
 # Firstly we test the number of p
 #crafting the collected ts to make the var model
 colle_ts <- cbind(pricets_fit , consumptionts_fit)
 
+###
 #Selcting the number of p to include
-lag_select <- VARselect(colle_ts, lag.max = 365, type = "const")
+lag_select <- VARselect(colle_ts, lag.max = 10, type = "const")
 lag_select$selection
 
-Model1 <- VAR(colle_ts, p = 7, type = "const", season = NULL, exog = NULL)
+aic_values <- numeric(15)
+bic_values <- numeric(15)
+
+for (i in 1:20) {
+  model <- VAR(colle_ts, p=i, type="const")
+  aic_values[i] <- AIC(model)
+  bic_values[i] <- BIC(model)
+}
+
+# Plot AIC and BIC values to visualize the optimal lag
+plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC by Lag')
+points(bic_values, type='b', col='red')
+legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
+
+
+Model1 <- VAR(colle_ts, p = 6, type = "const", season = NULL, exog = NULL)
 restricted_model <- restrict(Model1)
 
 #summary
@@ -281,8 +271,8 @@ Acf(res_var)
 Acf(Model1$varresult$pricets_fit$residuals)
 Acf(Model1$varresult$consumptionts_fit$residuals)
 #restricted model
-Acf(restricted_model$varresult$pricets_fit$residuals, lag.max = 90)
-Acf(restricted_model$varresult$consumptionts_fit$residuals, lag.max = 90)
+Acf(restricted_model$varresult$pricets_fit$residuals, lag.max = 30)
+Acf(restricted_model$varresult$consumptionts_fit$residuals, lag.max = 30)
 
 #Checking nomality of the residuals
 ggqqplot(Model1$varresult$pricets_fit$residuals)
@@ -299,12 +289,14 @@ Acf(Model1$varresult$consumptionts_fit$residuals)
 
 
 ################################################################################
-#Making predictions using the VAR(7) model we have constructed
+#Making predictions using the VAR(6) model we have constructed
 # Forecast future values
-forecast_values <- predict(Model1, n.ahead = 365)  
+forecast_values <- predict(Model1, n.ahead = 90)  
+forecast_valres <- predict(restricted_model, n.ahead = 90)
 
 # Plot the forecasted values, zooming in on the last part
 autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
+autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 
 # Assuming 'Model1' is your fitted VAR model
 # 'n.ahead' is the number of periods you want to forecast 
@@ -328,8 +320,70 @@ lines(testing_data_price$day, forecasted_prices, col='red')
 plot(testing_data_consumption$day, testing_data_consumption$DailyConsumption, type='l', col='blue', ylim=range(c(forecasted_consumption, testing_data_consumption$DailyConsumption)))
 lines(testing_data_consumption$day, forecasted_consumption, col='red')
 
+#######
+#Reversing the forecast to fit with observed values.
+
+# Assuming 'forecasted_prices_stochastic' and 'forecasted_consumption_stochastic' are your differenced forecasts from VAR
+# 'last_known_price' and 'last_known_consumption' are the last observed values from the training set for prices and consumption respectively
+
+# Length of the training data
+n_train <- length(training_data_price$MeanPrice)
+
+# Number of forecast points for a week
+n_forecast <- 7  # If one week equals 7 days
+
+# New time points for forecasting
+t_forecast <- (n_train + 1):(n_train + n_forecast)
+
+# Predicting the deterministic component for the forecast period
+predicted_prices_deterministic <- predict(st_price, newdata = data.frame(t = t_forecast))
+predicted_consumption_deterministic <- predict(st_consumption, newdata = data.frame(t = t_forecast))
+
+# Extracting forecasted values for both price and consumption (adjust names based on your model)
+forecasted_prices_stochastic <- forecast_valres$fcst$price[, "fcst"]
+forecasted_consumption_stochastic <- forecast_valres$fcst$consumption[, "fcst"]
+
+# Reverse differencing for prices
+last_known_price <- training_data_price[nrow(training_data_price), 'MeanPrice']
+forecasted_prices_original <- cumsum(c(last_known_price, forecasted_prices_stochastic))
+
+# Reverse differencing for consumption
+last_known_consumption <- training_data_consumption[nrow(training_data_consumption), 'DailyConsumption']
+forecasted_consumption_original <- cumsum(c(last_known_consumption, forecasted_consumption_stochastic))
+
+# Add back the deterministic components
+final_forecasted_prices <- forecasted_prices_original + fitted_values_prices
+final_forecasted_consumption <- forecasted_consumption_original + fitted_values_consumption
+
+print(length(forecasted_prices_original))
+print(length(fitted_values_prices))
+
+###
+#New test
+# Assuming the last date in your training data
+last_train_date <- as.Date("2019-12-31")  # Last day of your training data
+first_test_date <- as.Date("2020-01-01")  # First day of your testing data
+last_test_date <- max(testing_data_price$day)  # Last date in your testing data
+
+# Calculate the number of forecast days
+n_forecast <- as.integer(last_test_date - last_train_date)
+
+# Generate new t values for the forecast
+t_forecast <- (max(t) + 1):(max(t) + n_forecast)
+
+# Predict deterministic component for the test period
+predicted_prices_deterministic <- predict(st_price, newdata = data.frame(t = t_forecast))
+predicted_consumption_deterministic <- predict(st_consumption, newdata = data.frame(t = t_forecast))
+
+# Forecasting using the VAR model
+forecast_valres <- predict(restricted_model, n.ahead = n_forecast)
+forecasted_prices_stochastic = forecast_valres$fcst$price[, "fcst"]
+forecasted_consumption_stochastic = forecast_valres$fcst$consumption[, "fcst"]
 
 
+################################################################################
+###
+#calculating the breakpoint and splitpoint for constructing second model
 chow_test <- chow.test(Model1, SB = 1460)
 summary(chow_test)
 
@@ -342,13 +396,6 @@ plot(x1)
 ny <- chow.test(x1)
 summary(ny)
 
-
-
-
-
-
-
-# Assuming 'price_ts' is your time series object
 # Calculate the correct index positions directly, assuming daily data from the start date
 breakpoint_index <- 1356  # Observation for the breakpoint
 splitpoint_index <- 1416  # Observation for the sample split
