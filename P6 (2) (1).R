@@ -74,7 +74,6 @@ consumption_ts <- ts(training_data_consumption$DailyConsumption, frequency = 365
                                              training_data_consumption$day[1])))
 plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2020")
 ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2015 through 2019")
-
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
 Acf(price_ts, lag.max = 60, main = "ACF of spot prices with lag 60")
@@ -101,22 +100,6 @@ autoplot(mstl, main = "Decomposition of spot prices")
 cmsts <- msts(consumption_ts, seasonal.periods = c(7, 365))
 cmstl <- mstl(cmsts)
 autoplot(cmstl, main = "Decomposition of Gross Consumption")
-#######################################################################
-#deseasonalize the ts' first with price
-ndiffs(price_ts)
-nsdiffs(price_ts)
-#Reveal that differencing 1 time might be a good idea.
-
-diff_price_ts <- diff(price_ts)
-ggtsdisplay(diff_price_ts)
-
-adf_test <- ur.df(diff_price_ts)
-summary(adf_test)
-
-Acf(diff_price_ts)
-Pacf(diff_price_ts)
-#tests reveal, differencing wont help
-
 #################################
 #making the time series as a linear regression where we have the time series in 2 components
 #X_t=s_t+Y_t, one is deterministic and one is stochastic
@@ -154,13 +137,6 @@ autoplot(consumption_ts, series = "cons", ylab = "hej", colour = "black") +
 ggtsdisplay(adjusted_pricets, lag.max = 60)
 ggtsdisplay(adjusted_consumptionts, lag.max = 60)
 Acf(adjusted_consumptionts, lag.max = 90)
-
-# Perform ADF test on the adjusted models
-adf_test_pricets <- ur.df(adjusted_pricets, type = "drift", lags = 1)
-summary(adf_test_pricets)
-
-checkresiduals(price_ts)
-checkresiduals(adjusted_pricets, lag.max = 30)
 
 #looking at the ACF of each ts we still have some trend and season remaining that we want to remove with a SARIMA
 # Tests for which model desribes the season and trend, RUN AT YOUR own discretion
@@ -238,7 +214,7 @@ for (i in 1:20) {
 }
 
 # Plot AIC and BIC values to visualize the optimal lag
-plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC by Lag')
+plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC and BIC by Lag')
 points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
@@ -287,16 +263,11 @@ Acf(Model1$varresult$consumptionts_fit$residuals)
 #Impuslse response function
 irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 40, ortho = TRUE,
                cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
-#png("figs/irf_gdp_quarterly.png", width = 700, height = 500)
 plot(irf_price)
-#dev.off()
 
 irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 40, ortho = TRUE,
                  cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
-#png("figs/irf_gdp_quarterly.png", width = 700, height = 500)
 plot(irf_consumption)
-
-
 ################################################################################
 #Making predictions using the VAR(6) model we have constructed
 # Forecast future values
@@ -310,96 +281,12 @@ predpred <- cumsum(c(last_known_price, predict_2))
 
 forecasted_prices_original <- cumsum(c(last_known_price, forecasted_prices_stochastic))
 
-
 # Plot the forecasted values, zooming in on the last part
 autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 
-# Assuming 'Model1' is your fitted VAR model
-# 'n.ahead' is the number of periods you want to forecast 
-n.ahead <- nrow(testing_data_price)
-
-# Generate predictions
-predictions <- predict(Model1, n.ahead=n.ahead)
-
-# Accessing the forecast for the first variable (price)
-# The $fcst element of 'predictions' should be a list with named elements for each variable
-forecasted_prices <- predictions$fcst$pricets_fit[, "fcst"]
-
-# Accessing the forecast for the second variable (consumption)
-forecasted_consumption <- predictions$fcst$consumptionts_fit[, "fcst"]
-
-# Now plot the actual and forecasted prices
-plot(testing_data_price$day, testing_data_price$MeanPrice, type='l', col='blue', ylim=range(c(forecasted_prices, testing_data_price$MeanPrice)))
-lines(testing_data_price$day, forecasted_prices, col='red')
-
-# Now plot the actual and forecasted prices
-plot(testing_data_consumption$day, testing_data_consumption$DailyConsumption, type='l', col='blue', ylim=range(c(forecasted_consumption, testing_data_consumption$DailyConsumption)))
-lines(testing_data_consumption$day, forecasted_consumption, col='red')
-
-#######
-#Reversing the forecast to fit with observed values.
-
-# Assuming 'forecasted_prices_stochastic' and 'forecasted_consumption_stochastic' are your differenced forecasts from VAR
-# 'last_known_price' and 'last_known_consumption' are the last observed values from the training set for prices and consumption respectively
-
-# Length of the training data
-n_train <- length(training_data_price$MeanPrice)
-
-# Number of forecast points for a week
-n_forecast <- 14  # If one week equals 7 days
-
-# New time points for forecasting
-t_forecast <- (n_train + 1):(n_train + n_forecast)
-
-# Predicting the deterministic component for the forecast period
-predicted_prices_deterministic <- predict(st_price, newdata = data.frame(t = t_forecast))
-predicted_consumption_deterministic <- predict(st_consumption, newdata = data.frame(t = t_forecast))
-
-# Extracting forecasted values for both price and consumption (adjust names based on your model)
-forecasted_prices_stochastic <- forecast_valres$fcst$price[, "fcst"]
-forecasted_consumption_stochastic <- forecast_valres$fcst$consumption[, "fcst"]
-
-# Reverse differencing for prices
-last_known_price <- training_data_price[nrow(training_data_price), 'MeanPrice']
-forecasted_prices_original <- cumsum(c(last_known_price, forecasted_prices_stochastic))
-
-# Reverse differencing for consumption
-last_known_consumption <- training_data_consumption[nrow(training_data_consumption), 'DailyConsumption']
-forecasted_consumption_original <- cumsum(c(last_known_consumption, forecasted_consumption_stochastic))
-
-# Add back the deterministic components
-final_forecasted_prices <- forecasted_prices_original + fitted_values_prices
-final_forecasted_consumption <- forecasted_consumption_original + fitted_values_consumption
-
-print(length(forecasted_prices_original))
-print(length(fitted_values_prices))
-
-###
-#New test
-# Assuming the last date in your training data
-last_train_date <- as.Date("2019-12-31")  # Last day of your training data
-first_test_date <- as.Date("2020-01-01")  # First day of your testing data
-last_test_date <- max(testing_data_price$day)  # Last date in your testing data
-
-# Calculate the number of forecast days
-n_forecast <- as.integer(last_test_date - last_train_date)
-
-# Generate new t values for the forecast
-t_forecast <- (max(t) + 1):(max(t) + n_forecast)
-
-# Predict deterministic component for the test period
-predicted_prices_deterministic <- predict(st_price, newdata = data.frame(t = t_forecast))
-predicted_consumption_deterministic <- predict(st_consumption, newdata = data.frame(t = t_forecast))
-
-# Forecasting using the VAR model
-forecast_valres <- predict(restricted_model, n.ahead = n_forecast)
-forecasted_prices_stochastic = forecast_valres$fcst$price[, "fcst"]
-forecasted_consumption_stochastic = forecast_valres$fcst$consumption[, "fcst"]
-
-
 ################################################################################
-###
+################################################################################
 #calculating the breakpoint and splitpoint for constructing second model
 chow_test <- chow.test(Model1, SB = 1440)
 summary(chow_test)
@@ -516,10 +403,7 @@ ggtsdisplay(res_consumption_2, main = "Cleaned consumption model")
 # crafting the collected ts to make the var model
 colle_ts_2 <- cbind(pricets_fit_2 , consumptionts_fit_2)
 
-#Selcting the number of p to include
-lag_select_2 <- VARselect(colle_ts_2, type = "const")
-lag_select_2$selection
-
+#Selcting the number of lags to include
 aic_values <- numeric(15)
 bic_values <- numeric(15)
 
@@ -530,7 +414,7 @@ for (i in 1:20) {
 }
 
 # Plot AIC and BIC values to visualize the optimal lag
-plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC by Lag')
+plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC and BIC by Lag')
 points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
@@ -539,7 +423,7 @@ Model2 <- VAR(colle_ts, p = 8, type = "const", season = NULL, exog = NULL)
 restricted_model_2 <- restrict(Model2)
 
 Acf(restricted_model_2$varresult$pricets_fit$residuals)
-Acf(restricted_model_2$varresult$consumptionts_fit$residuals)
+Acf(restricted_model_2$varresult$consumptionts_fit$residuals, lag.max = 60)
 ##
 #predictions
 forecast_values_2 <- predict(Model2, n.ahead = 90)  
