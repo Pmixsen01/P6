@@ -75,9 +75,6 @@ consumption_ts <- ts(training_data_consumption$DailyConsumption, frequency = 365
 plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2020")
 ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2015 through 2019")
 
-#autoplot the ts together
-autoplot(cbind(price_ts, consumption_ts))
-
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
 Acf(price_ts, lag.max = 60, main = "ACF of spot prices with lag 60")
@@ -96,36 +93,14 @@ adf.test(consumption_ts)
 ####################################
 # Decomposition of each ts
 # Decomposition of price time series
-decomposition_price <- stl(price_ts, s.window = "periodic")
-autoplot(decomposition_price, ts.colour = "darkblue") + ggtitle("Decomposition of Spot Prices")
-
-# Extract residuals
-residuals_pricets <- decomposition_price$time.series[, "remainder"]
-
-# Plot ACF and PACF of residuals
-Acf(residuals_pricets, lag.max = 90)
-Pacf(residuals_pricets, lag.max = 30)
-ggtsdisplay(residuals_pricets)
-
-###
-#Decomposition of consumption
-de_consump <- stl(consumption_ts, s.window = "periodic")
-autoplot(de_consump, ts.colour = "darkblue") + ggtitle("Decomposition of Gross Consumption")
-
-# Extract residuals
-residuals_cons <- de_consump$time.series[, "remainder"]
-
 #MSTL
 msts <- msts(price_ts, seasonal.periods = c(7, 365))
-
 mstl <- mstl(msts)
-
-autoplot(mstl)
+autoplot(mstl, main = "Decomposition of spot prices")
 
 cmsts <- msts(consumption_ts, seasonal.periods = c(7, 365))
 cmstl <- mstl(cmsts)
 autoplot(cmstl, main = "Decomposition of Gross Consumption")
-
 #######################################################################
 #deseasonalize the ts' first with price
 ndiffs(price_ts)
@@ -155,9 +130,6 @@ st_price <- lm(training_data_price$MeanPrice ~ t + sin(t*2*pi/7) + cos(t*2*pi/7)
                  sin(t*2*pi/180) + cos(t*2*pi/180) + sin(t*2*pi/365) + cos(t*2*pi/365) + + sin(t*2*pi/3.5) +
                  cos(t*2*pi/3.5) + sin(t*2*pi/2) + cos(t*2*pi/2))
 
-st_price <- lm(training_data_price$MeanPrice ~ t + sin(t*2*pi/7) + cos(t*2*pi/7) + sin(t*2*pi/3.5) +
-                 cos(t*2*pi/3.5) + sin(t*2*pi/2) + cos(t*2*pi/2) + sin(t*2*pi/21) + cos(t*2*pi/21)) 
-
 # Now for the consumption
 st_consumption <- lm(training_data_consumption$DailyConsumption ~ t + sin(t*2*pi/7) + cos(t*2*pi/7) + sin(t*2*pi/14) + 
                        cos(t*2*pi/14) +sin(t*2*pi/30) + cos(t*2*pi/30) + sin(t*2*pi/90) + cos(t*2*pi/90) +
@@ -181,6 +153,7 @@ autoplot(consumption_ts, series = "cons", ylab = "hej", colour = "black") +
 # Display using ggplots
 ggtsdisplay(adjusted_pricets, lag.max = 60)
 ggtsdisplay(adjusted_consumptionts, lag.max = 60)
+Acf(adjusted_consumptionts, lag.max = 90)
 
 # Perform ADF test on the adjusted models
 adf_test_pricets <- ur.df(adjusted_pricets, type = "drift", lags = 1)
@@ -244,7 +217,6 @@ kpss.test(consumptionts_fit, null = "Level")
 
 kpss.test(res_consumption, null = "Trend")
 
-
 ################################################################################
 # Constructing the VAR
 # Firstly we test the number of p
@@ -271,7 +243,7 @@ points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
 
-Model1 <- VAR(colle_ts, p = 6, type = "const", season = NULL, exog = NULL)
+Model1 <- VAR(colle_ts, p = 8, type = "const", season = NULL, exog = NULL)
 restricted_model <- restrict(Model1)
 
 #summary
@@ -429,10 +401,10 @@ forecasted_consumption_stochastic = forecast_valres$fcst$consumption[, "fcst"]
 ################################################################################
 ###
 #calculating the breakpoint and splitpoint for constructing second model
-chow_test <- chow.test(Model1, SB = 1460)
+chow_test <- chow.test(Model1, SB = 1440)
 summary(chow_test)
 
-breakpoint_date <- as.Date("2015-01-01") + days(1460) 
+breakpoint_date <- as.Date("2015-01-01") + days(1440) 
 breakpoint_date
 
 
@@ -442,7 +414,7 @@ ny <- chow.test(x1)
 summary(ny)
 
 # Calculate the correct index positions directly, assuming daily data from the start date
-breakpoint_index <- 1356  # Observation for the breakpoint
+breakpoint_index <- 1348  # Observation for the breakpoint
 splitpoint_index <- 1416  # Observation for the sample split
 
 # Create the plot with vertical lines
@@ -468,20 +440,18 @@ ggplot(data = as.data.frame(consumption_ts), aes(x = seq_along(consumption_ts), 
 ############################################################################################################
 #creating model 2
 #splitting it up
-training_data_price_2 <- subset(daily_price_means, as.Date("2018-12-31") < day & day < as.Date("2020-01-01"))
-training_data_consumption_2 <- subset(daily_cons_means, as.Date("2018-12-31") < day & day < as.Date("2020-01-01"))
+training_data_price_2 <- subset(daily_price_means, as.Date("2018-12-11") < day & day < as.Date("2020-01-01"))
+training_data_consumption_2 <- subset(daily_cons_means, as.Date("2018-12-11") < day & day < as.Date("2020-01-01"))
 
 #making the ts
 price_ts_2 <- ts(training_data_price_2$MeanPrice,frequency = 365, 
-               start = c(2018, which(day(ymd("2018-12-31")) == 
-                                       training_data_price_2$day[1])))
+               start = c(2018, 346))
 plot(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Electricity Prices, 2019-2020")
 ggtsdisplay(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Spot price from 2019 through 2020")
 
 #Making time series of consumption
 consumption_ts_2 <- ts(training_data_consumption_2$DailyConsumption, frequency = 365, 
-                     start = c(2018, which(day(ymd("2018-12-31")) == 
-                                             training_data_consumption_2$day[1])))
+                     start = c(2018, 346))
 plot(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2018-2020")
 ggtsdisplay(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2018 through 2019")
 
@@ -491,7 +461,9 @@ i <- 1:length(training_data_price_2$MeanPrice)
 #Constructing the deterministic ts for price 
 st_price_2 <- lm(training_data_price_2$MeanPrice ~ i + sin(i*2*pi/7) + cos(i*2*pi/7) + sin(i*2*pi/30) 
                + cos(i*2*pi/30) + sin(i*2*pi/90) + cos(i*2*pi/90) + sin(i*2*pi/180) +
-                 sin(i*2*pi/365) + cos(i*2*pi/365))
+                 sin(i*2*pi/365) + cos(i*2*pi/365) + sin(i*2*pi/3.5) +
+                 cos(i*2*pi/3.5) + sin(i*2*pi/2) + cos(i*2*pi/2) + sin(i*2*pi/14) +
+                 cos(i*2*pi/14))
 # Now for the consumption
 st_consumption_2 <- lm(training_data_consumption_2$DailyConsumption ~ i + sin(i*2*pi/7) + cos(i*2*pi/7) + sin(i*2*pi/30) 
                      + cos(i*2*pi/30) + sin(i*2*pi/90) + cos(i*2*pi/90) + sin(i*2*pi/180) +
@@ -505,15 +477,18 @@ fitted_values_consumption_2 <- fitted(st_consumption_2)
 adjusted_pricets_2 <- price_ts_2 - fitted_values_prices_2
 adjusted_consumptionts_2 <- consumption_ts_2 - fitted_values_consumption_2
 
+Acf(adjusted_pricets_2, lag.max = 49)
+Acf(adjusted_consumptionts_2, lag.max = 49)
+
 ggtsdisplay(adjusted_pricets_2)
 ggtsdisplay(adjusted_consumptionts_2)
-#Constructing the SARIMA
+#Constructing the SARIMA #(3,1,1)(2,1,1)
 price_arima_2 <- Arima(adjusted_pricets_2,
-                     order = c(3,1,1),
-                     seasonal = list(order = c(2,1,1), period = 7))
-checkresiduals(price_arima_2)
+                     order = c(1,1,3),
+                     seasonal = list(order = c(1,1,3), period = 7))
+checkresiduals(price_arima_2, lag.max = 30)
 consumption_arima_2 <- Arima(adjusted_consumptionts_2,
-                           order = c(5,0,0),
+                           order = c(5,1,0),
                            seasonal = list(order = c(1,1,1), period = 7))
 checkresiduals(consumption_arima_2)
 
@@ -528,7 +503,7 @@ autoplot(price_ts_2, series = "price_ts") + autolayer(res_price_2, series = "res
 
 #for consumption
 res_consumption_2 <- adjusted_consumptionts_2 - consumptionts_fit_2
-Acf(res_consumption_2, lag.max = 30)
+Acf(res_consumption_2, lag.max = 180)
 autoplot(consumption_ts_2, series = "consumption_ts") + autolayer(res_consumption_2, series = "res_cons") + 
   autolayer(consumptionts_fit_2, series = "fitted consumption")
 #making the ggtsdisplays
@@ -538,14 +513,29 @@ ggtsdisplay(res_consumption_2, main = "Cleaned consumption model")
 ################################################################################
 # Constructing the VAR
 # Firstly we test the number of p
-#crafting the collected ts to make the var model
+# crafting the collected ts to make the var model
 colle_ts_2 <- cbind(pricets_fit_2 , consumptionts_fit_2)
 
 #Selcting the number of p to include
 lag_select_2 <- VARselect(colle_ts_2, type = "const")
 lag_select_2$selection
 
-Model2 <- VAR(colle_ts, p = 10, type = "const", season = NULL, exog = NULL)
+aic_values <- numeric(15)
+bic_values <- numeric(15)
+
+for (i in 1:20) {
+  model2 <- VAR(colle_ts_2, p=i, type="const")
+  aic_values[i] <- AIC(model2)
+  bic_values[i] <- BIC(model2)
+}
+
+# Plot AIC and BIC values to visualize the optimal lag
+plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC by Lag')
+points(bic_values, type='b', col='red')
+legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
+
+
+Model2 <- VAR(colle_ts, p = 8, type = "const", season = NULL, exog = NULL)
 restricted_model_2 <- restrict(Model2)
 
 Acf(restricted_model_2$varresult$pricets_fit$residuals)
