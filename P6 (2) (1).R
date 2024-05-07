@@ -136,7 +136,7 @@ autoplot(consumption_ts, series = "cons", ylab = "hej", colour = "black") +
 # Display using ggplots
 ggtsdisplay(adjusted_pricets, lag.max = 60)
 ggtsdisplay(adjusted_consumptionts, lag.max = 60)
-Acf(adjusted_consumptionts, lag.max = 90)
+Acf(adjusted_consumptionts, lag.max = 60)
 
 #looking at the ACF of each ts we still have some trend and season remaining that we want to remove with a SARIMA
 # Tests for which model desribes the season and trend, RUN AT YOUR own discretion
@@ -236,8 +236,6 @@ irfs <- irf(restricted_model, n.ahead = 10, boot = FALSE)
 # Plot the impulse responses
 plot(irfs)
 
-
-
 #Checking the residuals of each ts in the var
 Acf(Model1$varresult$pricets_fit$residuals)
 Acf(Model1$varresult$consumptionts_fit$residuals)
@@ -271,7 +269,7 @@ plot(irf_consumption)
 ################################################################################
 #Making predictions using the VAR(6) model we have constructed
 # Forecast future values
-forecast_values <- predict(Model1, n.ahead = 90)  
+forecast_values <- forecast(Model1, h = 90, level = 95)  
 forecast_valres <- predict(restricted_model, n.ahead = 90)
 
 predict <- forecast(restricted_model, h = 14, level = 95)
@@ -284,6 +282,75 @@ forecasted_prices_original <- cumsum(c(last_known_price, forecasted_prices_stoch
 # Plot the forecasted values, zooming in on the last part
 autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
+
+###
+# Assuming your last actual price value is stored in `last_actual_price` and the last 7 price values in `last_season_price_values`
+
+# We need to initialize the undifferencing
+last_actual_price <- tail(training_data_price$MeanPrice, 1)
+last_season_price_values <- tail(training_data_price$MeanPrice, 7)
+
+undifference_price <- function(fcst, last_actual, last_season_values) {
+  n <- length(fcst)
+  undiff_values <- numeric(n)
+  undiff_values[1] <- last_actual + fcst[1] + last_season_values[1]
+  
+  for (i in 2:n) {
+    undiff_values[i] <- undiff_values[i-1] + fcst[i] + last_season_values[i %% 7 + 1]
+  }
+  
+  return(undiff_values)
+}
+
+# Forecasted values from your VAR output (assuming 'fcst' column is extracted)
+price_forecasts <- forecast_valres$fcst$pricets_fit[, "fcst"]
+undiff_prices <- undifference_price(price_forecasts, last_actual_price, last_season_price_values)
+
+###
+#consumption
+# Assuming the last 7 consumption values
+last_season_consumption_values <- tail(training_data_consumption$DailyConsumption, 7)
+
+undifference_consumption <- function(fcst, last_season_values) {
+  n <- length(fcst)
+  undiff_values <- numeric(n)
+  undiff_values[1] <- fcst[1] + last_season_values[1]
+  
+  for (i in 2:n) {
+    undiff_values[i] <- fcst[i] + last_season_values[i %% 7 + 1]
+  }
+  
+  return(undiff_values)
+}
+
+# Forecasted values from your VAR output for consumption
+consumption_forecasts <- forecast_valres$fcst$consumptionts_fit[, "fcst"]
+undiff_consumption <- undifference_consumption(consumption_forecasts, last_season_consumption_values)
+
+###
+# adding back the deterministic parts
+# Total length of the time series including forecast period
+total_length <- length(training_data_price$MeanPrice) + length(undiff_prices)
+
+# Create a new time variable for the extended period
+t_extended <- 1:total_length
+
+# Evaluate the deterministic components over the entire period
+det_price <- predict(st_price, newdata = data.frame(t = t_extended))
+det_consumption <- predict(st_consumption, newdata = data.frame(t = t_extended))
+
+# Now det_price and det_consumption contain the deterministic part for both training and forecast periods
+# Assuming the forecast length is the same as the length of your undifferenced forecasts
+forecast_length <- length(undiff_prices)  # Same should be true for undiff_consumption
+
+# Extract the deterministic parts for the forecast period
+det_price_forecast <- tail(det_price, forecast_length)
+det_consumption_forecast <- tail(det_consumption, forecast_length)
+
+# Final forecasts with deterministic components added back
+final_forecast_prices <- undiff_prices + det_price_forecast
+final_forecast_consumption <- undiff_consumption + det_consumption_forecast
+
 
 ################################################################################
 ################################################################################
