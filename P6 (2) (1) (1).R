@@ -147,13 +147,13 @@ Acf(adjusted_consumptionts, lag.max = 60)
 # Creating the optimal ts given the results from the previous tests
 ###
 #We start with the price
-price_arima <- Arima(adjusted_pricets,
-                     order = c(3,1,1),
+price_arima <- Arima(diff(adjusted_pricets),
+                     order = c(3,0,1),
                      seasonal = list(order = c(1,1,1), period = 7))
 checkresiduals(price_arima, lag.max = 49)
 ###
 # Then for consumption
-consumption_arima <- Arima(adjusted_consumptionts,
+consumption_arima <- Arima(diff(adjusted_consumptionts),
                            order = c(5,0,0),
                            seasonal = list(order = c(1,1,1), period = 7))
 checkresiduals(consumption_arima, lag.max = 49)
@@ -229,6 +229,62 @@ summary(restricted_model)
 res_var <- residuals(Model1)
 Acf(res_var)
 
+plot(res_var)
+
+plot(restricted_model$datamat$pricets_fit)
+price_var <- ts(restricted_model$datamat$pricets_fit, frequency = 365, 
+                start = c(2015, which(day(ymd("2015-01-01")) == 
+                                        training_data_price$day[1])))
+#plot of price
+autoplot(price_var, main = "VAR prices")
+
+consumption_var <- ts(restricted_model$datamat$consumptionts_fit, frequency = 365, 
+                start = c(2015, which(day(ymd("2015-01-01")) == 
+                                        training_data_price$day[1])))
+#plot of consumption
+autoplot(consumption_var, main = "VAR prices")
+
+#plot of original and the fitted
+# Convert time series to data frames for ggplot
+price_var_df <- data.frame(Date = time(price_var), Fitted = as.numeric(price_var))
+price_ts_df <- data.frame(Date = time(price_ts), Actual = as.numeric(price_ts))
+
+# Merge data frames by Date
+plot_data <- merge(price_var_df, price_ts_df, by = "Date", all = TRUE)
+
+# Create the plot
+ggplot(data = plot_data, aes(x = Date)) +
+  geom_line(aes(y = Fitted, colour = "Fitted"), size = 1) +
+  geom_line(aes(y = Actual, colour = "Actual"), size = 1) +
+  labs(title = "Comparison of Fitted and Actual Electricity Prices",
+       x = "Year",
+       y = "Electricity Price",
+       colour = "Legend") +
+  scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Convert time series to data frames for ggplot
+consumption_var_df <- data.frame(Date = time(consumption_var), Fitted = as.numeric(consumption_var))
+consumption_ts_df <- data.frame(Date = time(consumption_ts), Actual = as.numeric(consumption_ts))
+
+# Merge data frames by Date
+plot_data <- merge(consumption_var_df, consumption_ts_df, by = "Date", all = TRUE)
+
+# Create the plot
+ggplot(data = plot_data, aes(x = Date)) +
+  geom_line(aes(y = Fitted, colour = "Fitted"), size = 1) +
+  geom_line(aes(y = Actual, colour = "Actual"), size = 1) +
+  labs(title = "Comparison of Fitted and Actual Electricity Consumption",
+       x = "Year",
+       y = "Electricity Consumption",
+       colour = "Legend") +
+  scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+
 ###
 #Impusle response function
 irfs <- irf(restricted_model, n.ahead = 10, boot = FALSE)
@@ -293,7 +349,6 @@ last_season_price_values <- tail(training_data_price$MeanPrice, 7)
 # Forecasted values from your VAR output (assuming 'fcst' column is extracted)
 price_forecasts <- forecast_valres$fcst$pricets_fit[, "fcst"]
 undiff_prices <- cumsum(c(last_actual_price, price_forecasts))[-1]
-
 
 ###
 #consumption
@@ -376,14 +431,20 @@ print(paste("MAPE:", MAPE))
 ################################################################################
 ################################################################################
 #calculating the breakpoint and splitpoint for constructing second model
-chow_test <- chow.test(Model1, SB = 1440)
+chow_test <- chow.test(price_ts, SB = 1514)
 summary(chow_test)
 
-breakpoint_date <- as.Date("2015-01-01") + days(1440) 
+breakpoint_date <- as.Date("2015-01-01") + days(1514) 
 breakpoint_date
 
+#breakout tests
+r1 <- breakpoints(price_ts ~ 1)
+r12 <- confint(r1)
+plot(price_ts)
+lines(r1)
+lines(r12)
 
-x1 <- stability(Model1, type = "mv-chow-test")
+x1 <- stability(price_ts, type = "mv-chow-test")
 plot(x1)
 ny <- chow.test(x1)
 summary(ny)
@@ -415,18 +476,20 @@ ggplot(data = as.data.frame(consumption_ts), aes(x = seq_along(consumption_ts), 
 ############################################################################################################
 #creating model 2
 #splitting it up
-training_data_price_2 <- subset(daily_price_means, as.Date("2018-12-11") < day & day < as.Date("2020-01-01"))
-training_data_consumption_2 <- subset(daily_cons_means, as.Date("2018-12-11") < day & day < as.Date("2020-01-01"))
+training_data_price_2 <- subset(daily_price_means, as.Date("2019-02-23") < day & day < as.Date("2020-01-01"))
+training_data_consumption_2 <- subset(daily_cons_means, as.Date("2019-02-23") < day & day < as.Date("2020-01-01"))
+
+start_date <- as.Date("2019-01-01") + days(53)
 
 #making the ts
 price_ts_2 <- ts(training_data_price_2$MeanPrice,frequency = 365, 
-               start = c(2018, 346))
+               start = c(2019, 53))
 plot(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Electricity Prices, 2019-2020")
 ggtsdisplay(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Spot price from 2019 through 2020")
 
 #Making time series of consumption
 consumption_ts_2 <- ts(training_data_consumption_2$DailyConsumption, frequency = 365, 
-                     start = c(2018, 346))
+                     start = c(2019, 53))
 plot(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2018-2020")
 ggtsdisplay(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2018 through 2019")
 
@@ -459,8 +522,8 @@ ggtsdisplay(adjusted_pricets_2)
 ggtsdisplay(adjusted_consumptionts_2)
 #Constructing the SARIMA #(3,1,1)(2,1,1)
 price_arima_2 <- Arima(adjusted_pricets_2,
-                     order = c(1,1,3),
-                     seasonal = list(order = c(1,1,3), period = 7))
+                     order = c(3,1,1),
+                     seasonal = list(order = c(2,1,1), period = 7))
 checkresiduals(price_arima_2, lag.max = 30)
 consumption_arima_2 <- Arima(adjusted_consumptionts_2,
                            order = c(5,1,0),
@@ -507,7 +570,7 @@ points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
 
-Model2 <- VAR(colle_ts, p = 8, type = "const", season = NULL, exog = NULL)
+Model2 <- VAR(colle_ts_2, p = 8, type = "const", season = NULL, exog = NULL)
 restricted_model_2 <- restrict(Model2)
 
 Acf(restricted_model_2$varresult$pricets_fit$residuals)
@@ -521,3 +584,52 @@ forecast_resval_2 <- predict(restricted_model_2, n.ahead = 90)
 autoplot(forecast_values_2, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 autoplot(forecast_resval_2, xlim = c(2019.95, 2020.05), main = "New forecast of future values in 2020")
 
+
+price_var_2 <- ts(restricted_model_2$datamat$pricets_fit_2, frequency = 365, 
+                  start = c(2019, 53))
+#plot of price
+autoplot(price_var_2, main = "VAR prices")
+
+consumption_var_2 <- ts(restricted_model_2$datamat$consumptionts_fit_2, frequency = 365, 
+                        start = c(2019, 53))
+#plot of consumption
+autoplot(consumption_var_2, main = "VAR consumption")
+
+#plot of original and the fitted
+# Convert time series to data frames for ggplot
+price_var_df_2 <- data.frame(Date = time(price_var_2), Fitted = as.numeric(price_var_2))
+price_ts_df_2 <- data.frame(Date = time(price_ts_2), Actual = as.numeric(price_ts_2))
+
+# Merge data frames by Date
+plot_data_2 <- merge(price_var_df_2, price_ts_df_2, by = "Date", all = TRUE)
+
+# Create the plot
+ggplot(data = plot_data_2, aes(x = Date)) +
+  geom_line(aes(y = Fitted, colour = "Fitted"), size = 1) +
+  geom_line(aes(y = Actual, colour = "Actual"), size = 1) +
+  labs(title = "Comparison of Fitted and Actual Electricity Prices",
+       x = "Year",
+       y = "Electricity Price",
+       colour = "Legend") +
+  scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Convert time series to data frames for ggplot
+consumption_var_df <- data.frame(Date = time(consumption_var), Fitted = as.numeric(consumption_var))
+consumption_ts_df <- data.frame(Date = time(consumption_ts), Actual = as.numeric(consumption_ts))
+
+# Merge data frames by Date
+plot_data <- merge(consumption_var_df, consumption_ts_df, by = "Date", all = TRUE)
+
+# Create the plot
+ggplot(data = plot_data, aes(x = Date)) +
+  geom_line(aes(y = Fitted, colour = "Fitted"), size = 1) +
+  geom_line(aes(y = Actual, colour = "Actual"), size = 1) +
+  labs(title = "Comparison of Fitted and Actual Electricity Consumption",
+       x = "Year",
+       y = "Electricity Consumption",
+       colour = "Legend") +
+  scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
