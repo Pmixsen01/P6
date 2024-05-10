@@ -228,9 +228,11 @@ kpss.test(consumption_ts, null = "Level")
 kpss.test(pricets_fit, null = "Level")
 kpss.test(pricets_fit, null = "Trend")
 kpss.test(pricets_fit, null = c("Level", "Trend"))
-kpss.test(consumptionts_fit, null = "Level")
 
-kpss.test(res_consumption, null = "Trend")
+kpss.test(consumptionts_fit, null = "Level")
+kpss.test(consumptionts_fit, null = "Trend")
+kpss.test(consumptionts_fit, null = c("Level", "Trend"))
+
 
 ################################################################################
 # Constructing the VAR
