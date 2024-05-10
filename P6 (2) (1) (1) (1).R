@@ -104,15 +104,6 @@ handle_outliers_ts <- function(ts_data, span = 0.05, threshold = 3) {
 price_ts <- handle_outliers_ts(price_ts)
 consumption_ts <- handle_outliers_ts(consumption_ts)
 
-# Plotting the original and cleaned time series for comparison
-par(mfrow=c(2,1))
-plot(price_ts, main = "Original Price Time Series")
-plot(ts(price_ts_cleaned, frequency = 365, start = c(2015,1)), main = "Cleaned Price Time Series")
-
-plot(consumption_ts, main = "Original Consumption Time Series")
-plot(ts(consumption_ts_cleaned, frequency = 365, start = c(2015,1)), main = "Cleaned Consumption Time Series")
-par(mfrow=c(1,1))
-
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
 Acf(price_ts, lag.max = 60, main = "ACF of spot prices with lag 60")
@@ -147,15 +138,18 @@ autoplot(cmstl, main = "Decomposition of Gross Consumption")
 t <- 1:length(training_data_price$MeanPrice)
 
 #Constructing the deterministic ts for price 
-st_price <- lm(training_data_price$MeanPrice ~ t + sin(t*2*pi/7) + cos(t*2*pi/7) + sin(t*2*pi/14) + 
-                 cos(t*2*pi/14) + sin(t*2*pi/30) + cos(t*2*pi/30) + sin(t*2*pi/90) + cos(t*2*pi/90) + 
-                 sin(t*2*pi/180) + cos(t*2*pi/180) + sin(t*2*pi/365) + cos(t*2*pi/365) + + sin(t*2*pi/3.5) +
-                 cos(t*2*pi/3.5) + sin(t*2*pi/2) + cos(t*2*pi/2))
+st_price <- lm(training_data_price$MeanPrice ~ t 
+               + sin(t*2*pi/7) + cos(t*2*pi/7)
+               + sin(t*2*pi/30) + cos(t*2*pi/30)
+               + sin(t*2*pi/180) + cos(t*2*pi/180) 
+               + sin(t*2*pi/365) + cos(t*2*pi/365))
 
 # Now for the consumption
-st_consumption <- lm(training_data_consumption$DailyConsumption ~ t + sin(t*2*pi/7) + cos(t*2*pi/7) + sin(t*2*pi/14) + 
-                       cos(t*2*pi/14) +sin(t*2*pi/30) + cos(t*2*pi/30) + sin(t*2*pi/90) + cos(t*2*pi/90) +
-                       sin(t*2*pi/180) + cos(t*2*pi/180) + sin(t*2*pi/365) + cos(t*2*pi/365))
+st_consumption <- lm(training_data_consumption$DailyConsumption ~ t 
+                     + sin(t*2*pi/7) + cos(t*2*pi/7)
+                     + sin(t*2*pi/30) + cos(t*2*pi/30)
+                     + sin(t*2*pi/180) + cos(t*2*pi/180) 
+                     + sin(t*2*pi/365) + cos(t*2*pi/365))
 
 # Generate fitted values using the linear model
 fitted_values_prices <- fitted(st_price)
@@ -173,11 +167,9 @@ autoplot(consumption_ts, series = "cons", ylab = "hej", colour = "black") +
   autolayer(st_consts, series = "adjusted")
 
 # Display using ggplots
-ggtsdisplay(adjusted_pricets, main = "Adjusted spot prices",  lag.max = 60)
-ggtsdisplay(adjusted_consumptionts, main = "Adjusted gross consumption", lag.max = 60)
-Acf(adjusted_pricets, lag.max = 30, main = "ACF for adjusted spot prices up to 30 lags")
-Acf(adjusted_consumptionts, lag.max = 30,  main = "ACF for adjusted gross consumption up to 30 lags")
-
+ggtsdisplay(adjusted_pricets, lag.max = 60)
+ggtsdisplay(adjusted_consumptionts, lag.max = 60)
+Acf(adjusted_consumptionts, lag.max = 60)
 
 #looking at the ACF of each ts we still have some trend and season remaining that we want to remove with a SARIMA
 # Tests for which model desribes the season and trend, RUN AT YOUR own discretion
@@ -218,23 +210,6 @@ autoplot(consumption_ts, series = "consumption_ts") + autolayer(res_consumption,
 #making the ggtsdisplays
 ggtsdisplay(res_price, main = "Cleaned spot price model")
 ggtsdisplay(res_consumption, main = "Cleaned consumption model")
-
-#running kpss test
-#for original ts
-kpss.test(price_ts, null = "Level")
-kpss.test(price_ts, null = "Trend")
-kpss.test(consumption_ts, null = "Level")
-
-
-#For the final ts
-kpss.test(pricets_fit, null = "Level")
-kpss.test(pricets_fit, null = "Trend")
-kpss.test(pricets_fit, null = c("Level", "Trend"))
-
-kpss.test(consumptionts_fit, null = "Level")
-kpss.test(consumptionts_fit, null = "Trend")
-kpss.test(consumptionts_fit, null = c("Level", "Trend"))
-
 
 ################################################################################
 # Constructing the VAR
@@ -333,136 +308,61 @@ Acf(Model1$varresult$consumptionts_fit$residuals)
 Acf(restricted_model$varresult$pricets_fit$residuals, lag.max = 30)
 Acf(restricted_model$varresult$consumptionts_fit$residuals, lag.max = 30)
 
-#Serial correlation
-serial_price <- serial.test(restricted_model, lags.pt = 12, type = "PT.asymptotic")
-serial_price
-
-
 ################################################################################
 ###
 #Impuslse response function
-irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 40, ortho = TRUE,
+irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 10, ortho = TRUE,
                cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
 plot(irf_price)
 
-irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 40, ortho = TRUE,
+irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 10, ortho = TRUE,
                  cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
 plot(irf_consumption)
 ################################################################################
 #Making predictions using the VAR(6) model we have constructed
 # Forecast future values
-forecast_values <- forecast(Model1, h = 90, level = 95)  
-forecast_valres <- predict(restricted_model, n.ahead = 90)
-
-predict <- forecast(restricted_model, h = 14, level = 95)
-predict_2 <- xts(predict$forecast$pricets_fit$mean, order.by = as.Date("2020-01-01") + 1:14)
-last_known_price <- training_data_price[nrow(training_data_price), 'MeanPrice']
-predpred <- cumsum(c(last_known_price, predict_2))
-
-forecasted_prices_original <- cumsum(c(last_known_price, forecasted_prices_stochastic))
+forecast_valres <- predict(restricted_model, n.ahead = 366)
 
 # Plot the forecasted values, zooming in on the last part
-autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
-autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
+autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in")
 
 ###
-# Assuming your last actual price value is stored in `last_actual_price` and the last 7 price values in `last_season_price_values`
+# Transforming the predictions back to look at the predictions compared to observed values
+future_t <- 1:366 
+future_t <- future_t + 1826
 
-# We need to initialize the undifferencing
-last_actual_price <- tail(training_data_price$MeanPrice, 1)
-last_season_price_values <- tail(training_data_price$MeanPrice, 7)
-
-# Forecasted values from your VAR output (assuming 'fcst' column is extracted)
-price_forecasts <- forecast_valres$fcst$pricets_fit[, "fcst"]
-undiff_prices <- cumsum(c(last_actual_price, price_forecasts))[-1]
-
-###
-#consumption
-# Assuming the last 7 consumption values
-last_season_consumption_values <- tail(training_data_consumption$DailyConsumption, 7)
-
-undifference_consumption <- function(fcst, last_season_values) {
-  n <- length(fcst)
-  undiff_values <- numeric(n)
-  undiff_values[1] <- fcst[1] + last_season_values[1]
-  
-  for (i in 2:n) {
-    undiff_values[i] <- fcst[i] + last_season_values[i %% 7 + 1]
-  }
-  
-  return(undiff_values)
-}
-
-# Forecasted values from your VAR output for consumption
-consumption_forecasts <- forecast_valres$fcst$consumptionts_fit[, "fcst"]
-undiff_consumption <- undifference_consumption(consumption_forecasts, last_season_consumption_values)
-
-###
-# adding back the deterministic parts
-# Total length of the time series including forecast period
-total_length <- length(training_data_price$MeanPrice) + length(undiff_prices)
-
-# Create a new time variable for the extended period
-t_extended <- 1:total_length
-
-# Evaluate the deterministic components over the entire period
-det_price <- predict(st_price, newdata = data.frame(t = t_extended))
-det_consumption <- predict(st_consumption, newdata = data.frame(t = t_extended))
-
-# Now det_price and det_consumption contain the deterministic part for both training and forecast periods
-# Assuming the forecast length is the same as the length of your undifferenced forecasts
-forecast_length <- length(undiff_prices)  # Same should be true for undiff_consumption
-
-# Extract the deterministic parts for the forecast period
-det_price_forecast <- tail(det_price, forecast_length)
-det_consumption_forecast <- tail(det_consumption, forecast_length)
-
-# Final forecasts with deterministic components added back
-final_forecast_prices <- undiff_prices + det_price_forecast
-final_forecast_consumption <- undiff_consumption + det_consumption_forecast
-
-################################################################################
-###
-# Diagnosing the errors with the predictions.
-# Assuming you have 't_extended' that includes both training and forecasting periods
-all_det_price <- predict(st_price, newdata = data.frame(t = t_extended))
-
-# Plot all deterministic values
-plot(all_det_price, type = "l", col = "blue", main = "Complete Deterministic Component of Price")
-points(1827:length(all_det_price), all_det_price[1827:length(all_det_price)], col = "red", type = "l")
-legend("topright", legend = c("Fitted", "Forecasted"), col = c("blue", "red"), lty = 1)
-
-# Calculate and plot the final forecasts
-final_forecasts <- undiff_prices + det_price_forecast
+# Create a new data frame for these future time points
+future_data <- data.frame(
+  t = future_t,
+  sin_t_week = sin(future_t * 2 * pi / 7),
+  cos_t_week = cos(future_t * 2 * pi / 7),
+  sin_t_monthly = sin(future_t * 4 * pi / 30),
+  cos_t_monthly = cos(future_t * 4 * pi / 30),
+  sin_t_halfyearly = sin(future_t * 2 * pi / 180),
+  cos_t_halfyearly = cos(future_t * 2 * pi / 180),
+  sin_t_yearly = sin(future_t * 2 * pi / 365),
+  cos_t_yearly = cos(future_t * 2 * pi / 365)
+)
+# Assuming Deterministisk is your linear model
+price_st_predict <- predict(st_price, newdata = future_data)
+price_prediction <- forecast_valres$fcst$pricets_fit + price_st_predict
 
 # Plotting final forecasts against actual data
-plot(testing_data_price$MeanPrice, type = "l", col = "blue", ylim = range(c(testing_data_price$MeanPrice, final_forecasts)), main = "Final Forecasts vs Actual Data")
-lines(final_forecasts, col = "red")
+plot(testing_data_price$MeanPrice, type = "l", col = "blue", ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)), main = "Final Forecasts vs Actual Data")
+lines(price_prediction[,1], col = "red")
 legend("topright", legend = c("Actual", "Forecast"), col = c("blue", "red"), lty = 1)
 
-# Calculate error metrics
-actuals <- testing_data_price$MeanPrice
-forecasts <- final_forecasts[1:length(actuals)]  # Ensure the lengths are the same
-errors <- actuals - forecasts
-RMSE <- sqrt(mean(errors^2))
-MAE <- mean(abs(errors))
-MAPE <- mean(abs(errors/actuals))
+# For consumption
+consumption_st_predict <- predict(st_consumption, newdata = future_data)
+consumption_prediction <- forecast_valres$fcst$consumptionts_fit + consumption_st_predict
 
-# Print the error metrics
-print(paste("RMSE:", RMSE))
-print(paste("MAE:", MAE))
-print(paste("MAPE:", MAPE))
+plot(testing_data_consumption$DailyConsumption, type = "l", col = "blue", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)), main = "Final Forecasts vs Actual Data")
+lines(consumption_prediction[,1], col = "red")
+legend("topright", legend = c("Actual", "Forecast"), col = c("blue", "red"), lty = 1)
 
 
 ################################################################################
 ################################################################################
-#calculating the breakpoint and splitpoint for constructing second model
-chow_test <- chow.test(price_ts, SB = 1514)
-summary(chow_test)
-
-breakpoint_date <- as.Date("2015-01-01") + days(1514) 
-breakpoint_date
-
 #breakout tests
 r1 <- breakpoints(price_ts ~ 1)
 r12 <- confint(r1)
@@ -470,42 +370,14 @@ plot(price_ts)
 lines(r1)
 lines(r12)
 
-x1 <- stability(price_ts, type = "mv-chow-test")
-plot(x1)
-ny <- chow.test(x1)
-summary(ny)
-
-# Calculate the correct index positions directly, assuming daily data from the start date
-breakpoint_index <- 1348  # Observation for the breakpoint
-splitpoint_index <- 1416  # Observation for the sample split
-
-# Create the plot with vertical lines
-ggplot(data = as.data.frame(price_ts), aes(x = seq_along(price_ts), y = price_ts)) +
-  geom_line() +  # Plot the time series as a line plot
-  geom_vline(xintercept = breakpoint_index, color = "red", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = splitpoint_index, color = "blue", linetype = "dashed", size = 1) +
-  xlim(c(1000, 1800)) + 
-  labs(title = "Price Time Series with Structural Breaks", x = "Time", y = "Price") +
-  theme_minimal()
-
-# Create the plot with vertical lines for consumption
-ggplot(data = as.data.frame(consumption_ts), aes(x = seq_along(consumption_ts), y = consumption_ts)) +
-  geom_line() +  # Plot the time series as a line plot
-  geom_vline(xintercept = breakpoint_index, color = "red", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = splitpoint_index, color = "blue", linetype = "dashed", size = 1) +
-  xlim(c(1000, 1800)) +
-  labs(title = "Consumption Time Series with Structural Breaks", x = "Time", y = "Price") +
-  theme_minimal()
-
 ############################################################################################################
 ############################################################################################################
 ############################################################################################################
 #creating model 2
-#splitting it up
-training_data_price_2 <- subset(daily_price_means, as.Date("2019-02-23") < day & day < as.Date("2020-01-01"))
-training_data_consumption_2 <- subset(daily_cons_means, as.Date("2019-02-23") < day & day < as.Date("2020-01-01"))
-
 start_date <- as.Date("2019-01-01") + days(53)
+#splitting it up
+training_data_price_2 <- subset(daily_price_means, as.Date(start_date) < day & day < as.Date("2020-01-01"))
+training_data_consumption_2 <- subset(daily_cons_means, as.Date(start_date) < day & day < as.Date("2020-01-01"))
 
 #making the ts
 price_ts_2 <- ts(training_data_price_2$MeanPrice,frequency = 365, 
@@ -519,19 +391,25 @@ consumption_ts_2 <- ts(training_data_consumption_2$DailyConsumption, frequency =
 plot(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2018-2020")
 ggtsdisplay(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2018 through 2019")
 
+# Applying the function to price and consumption time series
+price_ts_2 <- handle_outliers_ts(price_ts_2)
+consumption_ts_2 <- handle_outliers_ts(consumption_ts_2)
+
 #setting a time interval, which is just our days in the whole periode
 i <- 1:length(training_data_price_2$MeanPrice)
 
 #Constructing the deterministic ts for price 
-st_price_2 <- lm(training_data_price_2$MeanPrice ~ i + sin(i*2*pi/7) + cos(i*2*pi/7) + sin(i*2*pi/30) 
-               + cos(i*2*pi/30) + sin(i*2*pi/90) + cos(i*2*pi/90) + sin(i*2*pi/180) +
-                 sin(i*2*pi/365) + cos(i*2*pi/365) + sin(i*2*pi/3.5) +
-                 cos(i*2*pi/3.5) + sin(i*2*pi/2) + cos(i*2*pi/2) + sin(i*2*pi/14) +
-                 cos(i*2*pi/14))
+st_price_2 <- lm(training_data_price_2$MeanPrice ~ i 
+                 + sin(i*2*pi/7) + cos(i*2*pi/7) 
+                 + sin(i*2*pi/30) + cos(i*2*pi/30) 
+                 + sin(i*2*pi/180) + cos(i*2*pi/180)
+                 + sin(i*2*pi/365) + cos(i*2*pi/365))
 # Now for the consumption
-st_consumption_2 <- lm(training_data_consumption_2$DailyConsumption ~ i + sin(i*2*pi/7) + cos(i*2*pi/7) + sin(i*2*pi/30) 
-                     + cos(i*2*pi/30) + sin(i*2*pi/90) + cos(i*2*pi/90) + sin(i*2*pi/180) +
-                       sin(i*2*pi/365) + cos(i*2*pi/365))
+st_consumption_2 <- lm(training_data_consumption_2$DailyConsumption ~ i 
+                       + sin(i*2*pi/7) + cos(i*2*pi/7) 
+                       + sin(i*2*pi/30) + cos(i*2*pi/30) 
+                       + sin(i*2*pi/180) + cos(i*2*pi/180)
+                       + sin(i*2*pi/365) + cos(i*2*pi/365))
 
 # Generate fitted values using the linear model
 fitted_values_prices_2 <- fitted(st_price_2)
@@ -606,15 +484,52 @@ Acf(restricted_model_2$varresult$consumptionts_fit$residuals, lag.max = 60)
 serial_price_2 <- serial.test(restricted_model_2, lags.pt = 12, type = "PT.asymptotic")
 serial_price_2
 
-
 ##
 #predictions
-forecast_values_2 <- predict(Model2, n.ahead = 90)  
 forecast_resval_2 <- predict(restricted_model_2, n.ahead = 90)
 
 # Plot the forecasted values, zooming in on the last part
 autoplot(forecast_values_2, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
 autoplot(forecast_resval_2, xlim = c(2019.95, 2020.05), main = "New forecast of future values in 2020")
+###
+# Transforming the predictions back to look at the predictions compared to observed values
+future_t_2 <- 1:366 
+future_t_2 <- future_t_2 + 311
+
+# Create a new data frame for these future time points
+future_data_2 <- data.frame(
+  t = future_t_2,
+  sin_t_week = sin(future_t_2 * 2 * pi / 7),
+  cos_t_week = cos(future_t_2 * 2 * pi / 7),
+  sin_t_monthly = sin(future_t_2 * 4 * pi / 30),
+  cos_t_monthly = cos(future_t_2 * 4 * pi / 30),
+  sin_t_halfyearly = sin(future_t_2 * 2 * pi / 180),
+  cos_t_halfyearly = cos(future_t_2 * 2 * pi / 180),
+  sin_t_yearly = sin(future_t_2 * 2 * pi / 365),
+  cos_t_yearly = cos(future_t_2 * 2 * pi / 365)
+)
+# making the deterministic part
+price_st_predict_2 <- predict(st_price_2, newdata = future_data_2)
+price_prediction_2 <- forecast_valres_2$fcst$pricets_fit + price_st_predict_2
+
+# Plotting final forecasts against actual data
+plot(testing_data_price$MeanPrice, type = "l", col = "blue", ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)), main = "Final Forecasts vs Actual Data")
+lines(price_prediction[,1], col = "red")
+legend("topright", legend = c("Actual", "Forecast"), col = c("blue", "red"), lty = 1)
+
+# For consumption
+consumption_st_predict <- predict(st_consumption, newdata = future_data)
+consumption_prediction <- forecast_valres$fcst$consumptionts_fit + consumption_st_predict
+
+plot(testing_data_consumption$DailyConsumption, type = "l", col = "blue", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)), main = "Final Forecasts vs Actual Data")
+lines(consumption_prediction[,1], col = "red")
+legend("topright", legend = c("Actual", "Forecast"), col = c("blue", "red"), lty = 1)
+
+
+
+
+
+
 
 
 price_var_2 <- ts(restricted_model_2$datamat$pricets_fit_2, frequency = 365, 
