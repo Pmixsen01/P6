@@ -111,7 +111,7 @@ plot(ts(price_ts_cleaned, frequency = 365, start = c(2015,1)), main = "Cleaned P
 
 plot(consumption_ts, main = "Original Consumption Time Series")
 plot(ts(consumption_ts_cleaned, frequency = 365, start = c(2015,1)), main = "Cleaned Consumption Time Series")
-
+par(mfrow=c(1,1))
 
 ############################################################################
 #creating the ACF to find what should be done to the time series to achieve stationarity
