@@ -173,9 +173,11 @@ autoplot(consumption_ts, series = "cons", ylab = "hej", colour = "black") +
   autolayer(st_consts, series = "adjusted")
 
 # Display using ggplots
-ggtsdisplay(adjusted_pricets, lag.max = 60)
-ggtsdisplay(adjusted_consumptionts, lag.max = 60)
-Acf(adjusted_consumptionts, lag.max = 60)
+ggtsdisplay(adjusted_pricets, main = "Adjusted spot prices",  lag.max = 60)
+ggtsdisplay(adjusted_consumptionts, main = "Adjusted gross consumption", lag.max = 60)
+Acf(adjusted_pricets, lag.max = 30, main = "ACF for adjusted spot prices up to 30 lags")
+Acf(adjusted_consumptionts, lag.max = 30,  main = "ACF for adjusted gross consumption up to 30 lags")
+
 
 #looking at the ACF of each ts we still have some trend and season remaining that we want to remove with a SARIMA
 # Tests for which model desribes the season and trend, RUN AT YOUR own discretion
