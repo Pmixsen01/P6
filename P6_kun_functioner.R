@@ -103,10 +103,6 @@ summary(adf_pricets)
 adf_consts <- ur.df(consumption_ts, type = "drift", lags = 1)
 summary(adf_consts)
 
-adf.test(price_ts)
-adf.test(consumption_ts)
-
-
 ####################################
 # Decomposition of each ts
 # Decomposition of price time series
@@ -149,7 +145,6 @@ adjusted_consumptionts <- consumption_ts - fitted_values_consumption
 # Tests for which model desribes the season and trend, RUN AT YOUR own discretion
 #test_price <- auto.arima(adjusted_pricets, stepwise = FALSE, approximation = FALSE, D = 1)
 #test_consump <- auto.arima(adjusted_consumptionts, stepwise = FALSE, approximation = FALSE, D = 1)
-
 ################################################################################
 # Creating the optimal ts given the results from the previous tests
 ###
@@ -187,9 +182,8 @@ kpss.test(consumptionts_fit, null = "Level")
 kpss.test(consumptionts_fit, null = "Trend")
 kpss.test(consumptionts_fit, null = c("Level", "Trend"))
 
-
 ################################################################################
-# Constructing the VAR
+############################# Constructing the VAR #############################
 # Firstly we test the number of p
 #crafting the collected ts to make the var model
 colle_ts <- cbind(pricets_fit , consumptionts_fit)
@@ -211,6 +205,7 @@ for (i in 1:20) {
 Model1 <- VAR(colle_ts, p = 8, type = "const", season = NULL, exog = NULL)
 restricted_model <- restrict(Model1)
 
+#summary
 summary(Model1)
 summary(restricted_model)
 
@@ -223,7 +218,6 @@ price_var <- ts(restricted_model$datamat$pricets_fit, frequency = 365,
 consumption_var <- ts(restricted_model$datamat$consumptionts_fit, frequency = 365, 
                       start = c(2015, which(day(ymd("2015-01-01")) == 
                                               training_data_price$day[1])))
-
 #plot of original and the fitted
 # Convert time series to data frames for ggplot
 price_var_df <- data.frame(Date = time(price_var), Fitted = as.numeric(price_var))
@@ -238,24 +232,49 @@ consumption_ts_df <- data.frame(Date = time(consumption_ts), Actual = as.numeric
 
 # Merge data frames by Date
 plot_data <- merge(consumption_var_df, consumption_ts_df, by = "Date", all = TRUE)
+
+
 ################################################################################
 ###
 #Impuslse response function
-irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 40, ortho = TRUE,
+irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 10, ortho = TRUE,
                  cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
 
-irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 40, ortho = TRUE,
+irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 10, ortho = TRUE,
                        cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
 ################################################################################
 #Making predictions using the VAR(6) model we have constructed
 # Forecast future values
-forecast_values <- forecast(Model1, h = 90, level = 95)  
-forecast_valres <- predict(restricted_model, n.ahead = 90)
+forecast_valres <- predict(restricted_model, n.ahead = 366)
+
+###
+# Transforming the predictions back to look at the predictions compared to observed values
+future_t <- 1:366 
+future_t <- future_t + 1826
+
+# Create a new data frame for these future time points
+future_data <- data.frame(
+  t = future_t,
+  sin_t_week = sin(future_t * 2 * pi / 7),
+  cos_t_week = cos(future_t * 2 * pi / 7),
+  sin_t_monthly = sin(future_t * 4 * pi / 30),
+  cos_t_monthly = cos(future_t * 4 * pi / 30),
+  sin_t_halfyearly = sin(future_t * 2 * pi / 180),
+  cos_t_halfyearly = cos(future_t * 2 * pi / 180),
+  sin_t_yearly = sin(future_t * 2 * pi / 365),
+  cos_t_yearly = cos(future_t * 2 * pi / 365)
+)
+# Assuming Deterministisk is your linear model
+price_st_predict <- predict(st_price, newdata = future_data)
+price_prediction <- forecast_valres$fcst$pricets_fit + price_st_predict
+
+# For consumption
+consumption_st_predict <- predict(st_consumption, newdata = future_data)
+consumption_prediction <- forecast_valres$fcst$consumptionts_fit + consumption_st_predict
 
 ################################################################################
 ################################################################################
-#calculating the breakpoint and splitpoint for constructing second model
-#breakout tests
+# Breakpoint tests
 r1 <- breakpoints(price_ts ~ 1)
 r12 <- confint(r1)
 
@@ -263,18 +282,22 @@ r12 <- confint(r1)
 ############################################################################################################
 ############################################################################################################
 #creating model 2
-#splitting it up
-training_data_price_2 <- subset(daily_price_means, as.Date("2019-02-23") < day & day < as.Date("2020-01-01"))
-training_data_consumption_2 <- subset(daily_cons_means, as.Date("2019-02-23") < day & day < as.Date("2020-01-01"))
-
 start_date <- as.Date("2019-01-01") + days(53)
+#splitting it up
+training_data_price_2 <- subset(daily_price_means, as.Date(start_date) < day & day < as.Date("2020-01-01"))
+training_data_consumption_2 <- subset(daily_cons_means, as.Date(start_date) < day & day < as.Date("2020-01-01"))
 
-#making the ts for spot prices
+#making the ts
 price_ts_2 <- ts(training_data_price_2$MeanPrice,frequency = 365, 
                  start = c(2019, 53))
+
 #Making time series of consumption
 consumption_ts_2 <- ts(training_data_consumption_2$DailyConsumption, frequency = 365, 
                        start = c(2019, 53))
+
+# Applying the function to price and consumption time series
+price_ts_2 <- handle_outliers_ts(price_ts_2)
+consumption_ts_2 <- handle_outliers_ts(consumption_ts_2)
 
 #setting a time interval, which is just our days in the whole periode
 i <- 1:length(training_data_price_2$MeanPrice)
@@ -302,23 +325,22 @@ adjusted_consumptionts_2 <- consumption_ts_2 - fitted_values_consumption_2
 
 #Constructing the SARIMA #(3,1,1)(2,1,1)
 price_arima_2 <- Arima(diff(adjusted_pricets_2),
-                       order = c(3,1,2),
-                       seasonal = list(order = c(1,1,1), period = 7))
+                       order = c(4,0,1),
+                       seasonal = list(order = c(0,1,1), period = 7))
 
 consumption_arima_2 <- Arima(diff(adjusted_consumptionts_2),
-                             order = c(5,1,0),
-                             seasonal = list(order = c(1,1,1), period = 7))
+                             order = c(5,0,1),
+                             seasonal = list(order = c(0,1,1), period = 7))
 
-# making the residuals
 pricets_fit_2 <- fitted(price_arima_2)
 consumptionts_fit_2 <- fitted(consumption_arima_2)
+
+# making the residuals
 res_price_2 <- adjusted_pricets_2 - pricets_fit_2
 res_consumption_2 <- adjusted_consumptionts_2 - consumptionts_fit_2
 
-
-
 ################################################################################
-# Constructing the VAR
+# Constructing the VAR for model2
 # Firstly we test the number of p
 # crafting the collected ts to make the var model
 colle_ts_2 <- cbind(pricets_fit_2 , consumptionts_fit_2)
@@ -336,20 +358,42 @@ for (i in 1:20) {
 Model2 <- VAR(colle_ts_2, p = 7, type = "const", season = NULL, exog = NULL)
 restricted_model_2 <- restrict(Model2)
 
-#Serial correlation
-serial_price_2 <- serial.test(restricted_model_2, lags.pt = 12, type = "PT.asymptotic")
-serial_price_2
-
-
 ##
 #predictions
-forecast_values_2 <- predict(Model2, n.ahead = 90)  
-forecast_resval_2 <- predict(restricted_model_2, n.ahead = 90)
+forecast_valres_2 <- predict(restricted_model_2, n.ahead = 366)
+
+# Transforming the predictions back to look at the predictions compared to observed values
+future_i_2 <- 1:366 
+future_i_2 <- future_i_2 + 311
+
+# Create a new data frame for these future time points
+future_data_2 <- data.frame(
+  i = future_i_2,
+  sin_i_week = sin(future_i_2 * 2 * pi / 7),
+  cos_i_week = cos(future_i_2 * 2 * pi / 7),
+  sin_i_monthly = sin(future_i_2 * 4 * pi / 30),
+  cos_i_monthly = cos(future_i_2 * 4 * pi / 30),
+  sin_i_halfyearly = sin(future_i_2 * 2 * pi / 180),
+  cos_i_halfyearly = cos(future_i_2 * 2 * pi / 180),
+  sin_i_yearly = sin(future_i_2 * 2 * pi / 365),
+  cos_i_yearly = cos(future_i_2 * 2 * pi / 365)
+)
+
+# making the deterministic part
+price_st_predict_2 <- predict(st_price_2, newdata = future_data_2)
+price_prediction_2 <- forecast_valres_2$fcst$pricets_fit + price_st_predict_2
+# For consumption
+consumption_st_predict_2 <- predict(st_consumption_2, newdata = future_data_2)
+consumption_prediction_2 <- forecast_valres_2$fcst$consumptionts_fit + consumption_st_predict_2
+
+
 
 price_var_2 <- ts(restricted_model_2$datamat$pricets_fit_2, frequency = 365, 
                   start = c(2019, 53))
 consumption_var_2 <- ts(restricted_model_2$datamat$consumptionts_fit_2, frequency = 365, 
                         start = c(2019, 53))
+
+#plot of original and the fitted
 # Convert time series to data frames for ggplot
 price_var_df_2 <- data.frame(Date = time(price_var_2), Fitted = as.numeric(price_var_2))
 price_ts_df_2 <- data.frame(Date = time(price_ts_2), Actual = as.numeric(price_ts_2))
@@ -363,4 +407,3 @@ consumption_ts_df <- data.frame(Date = time(consumption_ts), Actual = as.numeric
 
 # Merge data frames by Date
 plot_data <- merge(consumption_var_df, consumption_ts_df, by = "Date", all = TRUE)
-
