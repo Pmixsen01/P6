@@ -33,8 +33,8 @@ checkresiduals(price_arima, lag.max = 49)
 checkresiduals(consumption_arima, lag.max = 49)
 
 # ACF plots of residuls
-Acf(res_price, lag.max = 30)
-Acf(res_consumption, lag.max = 30)
+Acf(res_price, lag.max = 30, main = "ACF for residuals spot prices up to 30 lags")
+Acf(res_consumption, lag.max = 30, main = "ACF for residuals Gross Consumption up to 30 lags")
 
 # making the ggtsdisplays
 ggtsdisplay(res_price, main = "Cleaned spot price model")
@@ -43,38 +43,44 @@ ggtsdisplay(res_consumption, main = "Cleaned consumption model")
 
 #################################################################################
 ############################ Plots for the VAR model ############################ 
+
 # Plot AIC and BIC values to visualize the optimal lag
 plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC and BIC by Lag')
 points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
-# acf plot for the residuals of var model
 Acf(res_var)
 
-#plot of spot prices VAR model
-autoplot(price_var, main = "VAR prices")
-#plot of gross consumption VAR model
-autoplot(consumption_var, main = "VAR prices")
+plot(res_var)
+plot(restricted_model$datamat$pricets_fit)
 
-#plot of original and the fitted, spot prices
+#plot of price
+autoplot(price_var, main = "VAR prices")
+ggtsdisplay(price_var)
+
+#plot of consumption
+autoplot(consumption_var, main = "VAR prices")
+ggtsdisplay(consumption_var)
+
+# Create the plot for prices
 ggplot(data = plot_data, aes(x = Date)) +
   geom_line(aes(y = Fitted, colour = "Fitted"), size = 1) +
   geom_line(aes(y = Actual, colour = "Actual"), size = 1) +
-  labs(title = "Comparison of Fitted and Actual Electricity Prices",
+  labs(title = "Comparison of Fitted and Actual Spot Prices",
        x = "Year",
-       y = "Electricity Price",
+       y = "Spot Price",
        colour = "Legend") +
   scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5))
 
-#plot of original and the fitted, gross consumption
+# Create the plot for consumption
 ggplot(data = plot_data, aes(x = Date)) +
   geom_line(aes(y = Fitted, colour = "Fitted"), size = 1) +
   geom_line(aes(y = Actual, colour = "Actual"), size = 1) +
-  labs(title = "Comparison of Fitted and Actual Electricity Consumption",
+  labs(title = "Comparison of Fitted and Actual Gross Consumption",
        x = "Year",
-       y = "Electricity Consumption",
+       y = "Gross Consumption",
        colour = "Legend") +
   scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
   theme_minimal() +
@@ -90,74 +96,123 @@ Acf(restricted_model$varresult$consumptionts_fit$residuals, lag.max = 30)
 
 ################################################################################
 ###
-#Impuslse response function plots
+#Impuslse response function
 plot(irf_price)
 plot(irf_consumption)
 
+
 ################################################################################
+#Making predictions using the VAR(6) model we have constructed
 # Plot the forecasted values, zooming in on the last part
-autoplot(forecast_values, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
-autoplot(forecast_valres, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
+autoplot(forecast_valres, xlim = c(2019.95, 2020.5), main = "Forecast of future values in")
 
+###
+#plotting
+# For Price Forecast
+plot(testing_data_price$MeanPrice, type = "l", col = "green4",ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)),
+     xlim = c(1, 100), main = "Spot Price forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+lines(price_prediction[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(price_prediction[1:100,3], rev(price_prediction[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(price_prediction[1:100,2], col = "navyblue")
+lines(price_prediction[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
+
+# For Consumption Forecast
+plot(testing_data_consumption$DailyConsumption, type = "l", col = "green4", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)),
+     xlim = c(1, 100), main = "Gross Consumption forecast compared to Observations", ylab = "Gross Consumption", xlab = "Days")
+lines(consumption_prediction[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(consumption_prediction[1:100,3], rev(consumption_prediction[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(consumption_prediction[1:100,2], col = "navyblue")
+lines(consumption_prediction[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
+
+###############################################################################
 ################################################################################
-################################################################################
-#breakout tests
-plot(price_ts)
-lines(r1)
-lines(r12)
+# Breakpoint tests
+plot(price_ts, main = "Regime Shifts in Spot Prices", ylab = "Spot prices")
+lines(r1, col = "navyblue")
+lines(r12, col = "red")
+legend("topright", legend = c("Breakpoints", "Confidence Intervals"), 
+       col = c("navyblue", "red"), lty = 1, cex = 0.6)
+
+
+
 
 ############################################################################################################
 ############################################################################################################
 ############################################################################################################
-##plot of model 2 for spot prices
-plot(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Spot prices, 2019-2020")
+#creating model 2
+#plots for price
+plot(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Electricity Prices, 2019-2020")
 ggtsdisplay(price_ts_2, xlab = "Year", ylab = "Daily Prices", main = "Spot price from 2019 through 2020")
-
-##plot of model 2 for gross consumption
-plot(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption, 2019-2020")
-ggtsdisplay(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption from 2019 through 2020")
+#plors for consumption
+plot(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2018-2020")
+ggtsdisplay(consumption_ts_2, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2018 through 2019")
 
 
 Acf(adjusted_pricets_2, lag.max = 49)
 Acf(adjusted_consumptionts_2, lag.max = 49)
 
-ggtsdisplay(adjusted_pricets_2, main = "Adjusted spot prices from 2019 through 2020" )
-ggtsdisplay(adjusted_consumptionts_2, main = "Adjusted gross consumption from 2019 through 2020")
+ggtsdisplay(adjusted_pricets_2)
+ggtsdisplay(adjusted_consumptionts_2)
 
-#Constructing the SARIMA #(3,1,1)(2,1,1)
-checkresiduals(price_arima_2, lag.max = 90)
-checkresiduals(consumption_arima_2)
+#Splot the SARIMA #(3,1,1)(2,1,1)
+checkresiduals(price_arima_2, lag.max = 49)
+checkresiduals(consumption_arima_2, lag.max = 49)
 
-
-# plot of the residuals
+#residuals
 Acf(res_price_2, lag.max = 30)
+autoplot(price_ts_2, series = "price_ts") + autolayer(res_price_2, series = "res_price") + 
+  autolayer(pricets_fit_2, series = "fitted price")
+
 Acf(res_consumption_2, lag.max = 180)
+autoplot(consumption_ts_2, series = "consumption_ts") + autolayer(res_consumption_2, series = "res_cons") + 
+  autolayer(consumptionts_fit_2, series = "fitted consumption")
 
 #making the ggtsdisplays
-ggtsdisplay(res_price_2, main = "Cleaned spot price model from 2019 through 2020")
-ggtsdisplay(res_consumption_2, main = "Cleaned consumption model from 2019 through 2020")
+ggtsdisplay(res_price_2, main = "Cleaned spot price model")
+ggtsdisplay(res_consumption_2, main = "Cleaned consumption model")
+
+ggtsdisplay(pricets_fit_2)
+ggtsdisplay(adjusted_pricets_2)
 
 ################################################################################
-# Plot AIC and BIC values to visualize the optimal lag for VAR model
+# Constructing the VAR for model2
+# Plot AIC and BIC values to visualize the optimal lag
 plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC and BIC by Lag')
 points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
-
 Acf(restricted_model_2$varresult$pricets_fit$residuals)
 Acf(restricted_model_2$varresult$consumptionts_fit$residuals, lag.max = 60)
 
-
-##
 # Plot the forecasted values, zooming in on the last part
-autoplot(forecast_values_2, xlim = c(2019.95, 2020.05), main = "Forecast of future values in 2020")
-autoplot(forecast_resval_2, xlim = c(2019.95, 2020.05), main = "New forecast of future values in 2020")
+autoplot(forecast_valres_2, xlim = c(2019.95, 2020.05), main = "New forecast of future values in 2020")
 
+# For Price Forecast
+plot(testing_data_price$MeanPrice, type = "l", col = "green4",ylim = range(c(testing_data_price$MeanPrice, forecast_valres_2$fcst$pricets_fit)), 
+     xlim = c(1, 100), main = "Spot Price forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+lines(price_prediction_2[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(price_prediction_2[1:100,3], rev(price_prediction_2[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(price_prediction_2[1:100,2], col = "navyblue")
+lines(price_prediction_2[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.8)
 
+# For Consumption Forecast
+plot(testing_data_consumption$DailyConsumption, type = "l", col = "green4", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres_2$fcst$consumptionts_fit)), 
+     xlim = c(1, 100), main = "Gross Consumption forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+lines(consumption_prediction_2[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(consumption_prediction_2[1:100,3], rev(consumption_prediction_2[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(consumption_prediction_2[1:100,2], col = "navyblue")
+lines(consumption_prediction_2[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
 
-#plot of price
+#plot of VAR mdoels
 autoplot(price_var_2, main = "VAR prices")
-#plot of consumption
 autoplot(consumption_var_2, main = "VAR consumption")
 
 # Create the plot
@@ -183,4 +238,5 @@ ggplot(data = plot_data, aes(x = Date)) +
   scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5))
+
 
