@@ -171,6 +171,14 @@ ggtsdisplay(adjusted_pricets, lag.max = 60)
 ggtsdisplay(adjusted_consumptionts, lag.max = 60)
 Acf(adjusted_consumptionts, lag.max = 60)
 
+msts <- msts(adjusted_pricets, seasonal.periods = c(7, 365))
+mstl <- mstl(msts)
+autoplot(mstl, main = "Decomposition of spot prices")
+
+cmsts <- msts(consumption_ts, seasonal.periods = c(7, 365))
+cmstl <- mstl(cmsts)
+autoplot(cmstl, main = "Decomposition of Gross Consumption")
+
 #looking at the ACF of each ts we still have some trend and season remaining that we want to remove with a SARIMA
 # Tests for which model desribes the season and trend, RUN AT YOUR own discretion
 #test_price <- auto.arima(adjusted_pricets, stepwise = FALSE, approximation = FALSE, D = 1)
@@ -181,13 +189,13 @@ Acf(adjusted_consumptionts, lag.max = 60)
 ###
 #We start with the price
 price_arima <- Arima(adjusted_pricets,
-                     order = c(4,1,1),
+                     order = c(4,0,1),
                      seasonal = list(order = c(1,1,1), period = 7))
 checkresiduals(price_arima, lag.max = 49)
 ###
 # Then for consumption
 consumption_arima <- Arima(adjusted_consumptionts,
-                           order = c(5,1,0),
+                           order = c(4,0,1),
                            seasonal = list(order = c(1,1,1), period = 7))
 checkresiduals(consumption_arima, lag.max = 49)
 
@@ -349,33 +357,42 @@ future_data <- data.frame(
 price_st_predict <- predict(st_price, newdata = future_data)
 price_prediction <- forecast_valres$fcst$pricets_fit + price_st_predict
 
-# Plotting final forecasts against actual data
-plot(testing_data_price$MeanPrice, type = "l", col = "blue", ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)), main = "Final Forecasts vs Actual Data")
-lines(price_prediction[,1], col = "red")
-lines(price_prediction[,2], col = "grey")
-lines(price_prediction[,3], col = "grey")
-legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("blue", "red", "grey"), lty = 1)
-
 # For consumption
 consumption_st_predict <- predict(st_consumption, newdata = future_data)
 consumption_prediction <- forecast_valres$fcst$consumptionts_fit + consumption_st_predict
 
-plot(testing_data_consumption$DailyConsumption, type = "l", col = "blue", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)), main = "Final Forecasts vs Actual Data")
-lines(consumption_prediction[,1], col = "red")
-lines(consumption_prediction[,2], col = "grey")
-lines(consumption_prediction[,3], col = "grey")
-legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("blue", "red", "grey"), lty = 1)
+###
+#plotting
+# For Price Forecast
+plot(testing_data_price$MeanPrice, type = "l", col = "green4",ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)),
+     xlim = c(1, 100), main = "Spot Price forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+lines(price_prediction[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(price_prediction[1:100,3], rev(price_prediction[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(price_prediction[1:100,2], col = "navyblue")
+lines(price_prediction[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
+
+# For Consumption Forecast
+plot(testing_data_consumption$DailyConsumption, type = "l", col = "green4", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)),
+     xlim = c(1, 100), main = "Gross Consumption forecast compared to Observations", ylab = "Gross Consumption", xlab = "Days")
+lines(consumption_prediction[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(consumption_prediction[1:100,3], rev(consumption_prediction[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(consumption_prediction[1:100,2], col = "navyblue")
+lines(consumption_prediction[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
 
 ################################################################################
 ################################################################################
-#breakout tests
+# Breakpoint tests
 r1 <- breakpoints(price_ts ~ 1)
 r12 <- confint(r1)
 plot(price_ts, main = "Regime Shifts in Spot Prices", ylab = "Spot prices")
 lines(r1, col = "navyblue")
 lines(r12, col = "red")
 legend("topright", legend = c("Breakpoints", "Confidence Intervals"), 
-       col = c("navyblue", "red"), lty = 1, cex = 0.8)
+       col = c("navyblue", "red"), lty = 1, cex = 0.6)
 
 ############################################################################################################
 ############################################################################################################
@@ -433,13 +450,13 @@ ggtsdisplay(adjusted_pricets_2)
 ggtsdisplay(adjusted_consumptionts_2)
 #Constructing the SARIMA #(3,1,1)(2,1,1)
 price_arima_2 <- Arima(diff(adjusted_pricets_2),
-                     order = c(3,1,2),
-                     seasonal = list(order = c(1,1,1), period = 7))
-checkresiduals(price_arima_2, lag.max = 90)
+                     order = c(4,0,1),
+                     seasonal = list(order = c(0,1,1), period = 7))
+checkresiduals(price_arima_2, lag.max = 49)
 consumption_arima_2 <- Arima(diff(adjusted_consumptionts_2),
-                           order = c(5,1,1),
-                           seasonal = list(order = c(1,1,1), period = 7))
-checkresiduals(consumption_arima_2)
+                           order = c(5,0,1),
+                           seasonal = list(order = c(0,1,1), period = 7))
+checkresiduals(consumption_arima_2, lag.max = 49)
 
 pricets_fit_2 <- fitted(price_arima_2)
 consumptionts_fit_2 <- fitted(consumption_arima_2)
@@ -458,6 +475,9 @@ autoplot(consumption_ts_2, series = "consumption_ts") + autolayer(res_consumptio
 #making the ggtsdisplays
 ggtsdisplay(res_price_2, main = "Cleaned spot price model")
 ggtsdisplay(res_consumption_2, main = "Cleaned consumption model")
+
+ggtsdisplay(pricets_fit_2)
+ggtsdisplay(adjusted_pricets_2)
 
 ################################################################################
 # Constructing the VAR
@@ -510,26 +530,33 @@ future_data_2 <- data.frame(
   sin_i_yearly = sin(future_i_2 * 2 * pi / 365),
   cos_i_yearly = cos(future_i_2 * 2 * pi / 365)
 )
+
 # making the deterministic part
 price_st_predict_2 <- predict(st_price_2, newdata = future_data_2)
 price_prediction_2 <- forecast_valres_2$fcst$pricets_fit + price_st_predict_2
-
-# Plotting final forecasts against actual data
-plot(testing_data_price$MeanPrice, type = "l", col = "blue", ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)), main = "Final Forecasts vs Actual Data")
-lines(price_prediction[,1], col = "red")
-legend("topright", legend = c("Actual", "Forecast"), col = c("blue", "red"), lty = 1)
-
 # For consumption
-consumption_st_predict <- predict(st_consumption, newdata = future_data)
-consumption_prediction <- forecast_valres$fcst$consumptionts_fit + consumption_st_predict
+consumption_st_predict_2 <- predict(st_consumption_2, newdata = future_data_2)
+consumption_prediction_2 <- forecast_valres_2$fcst$consumptionts_fit + consumption_st_predict_2
 
-plot(testing_data_consumption$DailyConsumption, type = "l", col = "blue", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)), main = "Final Forecasts vs Actual Data")
-lines(consumption_prediction[,1], col = "red")
-legend("topright", legend = c("Actual", "Forecast"), col = c("blue", "red"), lty = 1)
+# For Price Forecast
+plot(testing_data_price$MeanPrice, type = "l", col = "green4",ylim = range(c(testing_data_price$MeanPrice, forecast_valres_2$fcst$pricets_fit)), 
+     xlim = c(1, 100), main = "Spot Price forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+lines(price_prediction_2[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(price_prediction_2[1:100,3], rev(price_prediction_2[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(price_prediction_2[1:100,2], col = "navyblue")
+lines(price_prediction_2[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.8)
 
-
-
-
+# For Consumption Forecast
+plot(testing_data_consumption$DailyConsumption, type = "l", col = "green4", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres_2$fcst$consumptionts_fit)), 
+     xlim = c(1, 100), main = "Gross Consumption forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+lines(consumption_prediction_2[1:100,1], col = "red")  # Mean forecast
+# Adjusting transparency of the confidence interval
+polygon(c(1:100, 100:1), c(consumption_prediction_2[1:100,3], rev(consumption_prediction_2[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
+lines(consumption_prediction_2[1:100,2], col = "navyblue")
+lines(consumption_prediction_2[1:100,3], col = "navyblue")
+legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
 
 
 
