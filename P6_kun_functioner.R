@@ -193,8 +193,8 @@ colle_ts <- cbind(pricets_fit , consumptionts_fit)
 lag_select <- VARselect(colle_ts, lag.max = 10, type = "const")
 lag_select$selection
 
-aic_values <- numeric(15)
-bic_values <- numeric(15)
+aic_values <- numeric(20)
+bic_values <- numeric(20)
 
 for (i in 1:20) {
   model <- VAR(colle_ts, p=i, type="const")
@@ -237,13 +237,14 @@ plot_data <- merge(consumption_var_df, consumption_ts_df, by = "Date", all = TRU
 ################################################################################
 ###
 #Impuslse response function
-irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 10, ortho = TRUE,
+irf_price <- irf(restricted_model, impulse = "pricets_fit", response = "consumptionts_fit", n.ahead = 20, ortho = TRUE,
                  cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
 
-irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 10, ortho = TRUE,
+irf_consumption <- irf(restricted_model, impulse = "consumptionts_fit", response = "pricets_fit", n.ahead = 20, ortho = TRUE,
                        cumulative = TRUE, boot = TRUE, ci = 0.95, runs = 100)
+
 ################################################################################
-#Making predictions using the VAR(6) model we have constructed
+#Making predictions using the VAR(8) model we have constructed
 # Forecast future values
 forecast_valres <- predict(restricted_model, n.ahead = 366)
 
@@ -257,8 +258,8 @@ future_data <- data.frame(
   t = future_t,
   sin_t_week = sin(future_t * 2 * pi / 7),
   cos_t_week = cos(future_t * 2 * pi / 7),
-  sin_t_monthly = sin(future_t * 4 * pi / 30),
-  cos_t_monthly = cos(future_t * 4 * pi / 30),
+  sin_t_monthly = sin(future_t * 2 * pi / 30),
+  cos_t_monthly = cos(future_t * 2 * pi / 30),
   sin_t_halfyearly = sin(future_t * 2 * pi / 180),
   cos_t_halfyearly = cos(future_t * 2 * pi / 180),
   sin_t_yearly = sin(future_t * 2 * pi / 365),
@@ -267,10 +268,11 @@ future_data <- data.frame(
 # Assuming Deterministisk is your linear model
 price_st_predict <- predict(st_price, newdata = future_data)
 price_prediction <- forecast_valres$fcst$pricets_fit + price_st_predict
-
 # For consumption
 consumption_st_predict <- predict(st_consumption, newdata = future_data)
 consumption_prediction <- forecast_valres$fcst$consumptionts_fit + consumption_st_predict
+
+
 
 ################################################################################
 ################################################################################

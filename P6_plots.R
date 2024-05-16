@@ -45,14 +45,11 @@ ggtsdisplay(res_consumption, main = "Cleaned consumption model")
 ############################ Plots for the VAR model ############################ 
 
 # Plot AIC and BIC values to visualize the optimal lag
-plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC', main='AIC and BIC by Lag')
+plot(aic_values, type='b', col='blue', xlab='Number of Lags', ylab='AIC, BIC', main='AIC and BIC by Lag for Model1')
 points(bic_values, type='b', col='red')
 legend("topright", legend=c("AIC", "BIC"), col=c("blue", "red"), pch=1)
 
 Acf(res_var)
-
-plot(res_var)
-plot(restricted_model$datamat$pricets_fit)
 
 #plot of price
 autoplot(price_var, main = "VAR prices")
@@ -97,9 +94,8 @@ Acf(restricted_model$varresult$consumptionts_fit$residuals, lag.max = 30)
 ################################################################################
 ###
 #Impuslse response function
-plot(irf_price)
-plot(irf_consumption)
-
+plot(irf_price, main = "Impuslse response function for restricted Model1 of a shock in Spot Prices")
+plot(irf_consumption, main = "Impuslse response function for restricted Model1 of a shock in Gross Consumption")
 
 ################################################################################
 #Making predictions using the VAR(6) model we have constructed
@@ -110,23 +106,23 @@ autoplot(forecast_valres, xlim = c(2019.95, 2020.5), main = "Forecast of future 
 #plotting
 # For Price Forecast
 plot(testing_data_price$MeanPrice, type = "l", col = "green4",ylim = range(c(testing_data_price$MeanPrice, forecast_valres$fcst$pricets_fit)),
-     xlim = c(1, 100), main = "Spot Price forecast compared to Observations", ylab = "Spot Prices", xlab = "Days")
+     xlim = c(1, 100), main = "Spot Price forecast compared to Observations for the restricted Model1", ylab = "Spot Prices", xlab = "Days")
 lines(price_prediction[1:100,1], col = "red")  # Mean forecast
 # Adjusting transparency of the confidence interval
 polygon(c(1:100, 100:1), c(price_prediction[1:100,3], rev(price_prediction[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
 lines(price_prediction[1:100,2], col = "navyblue")
 lines(price_prediction[1:100,3], col = "navyblue")
-legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
+legend("bottomright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.65)
 
 # For Consumption Forecast
 plot(testing_data_consumption$DailyConsumption, type = "l", col = "green4", ylim = range(c(testing_data_consumption$DailyConsumption, forecast_valres$fcst$consumptionts_fit)),
-     xlim = c(1, 100), main = "Gross Consumption forecast compared to Observations", ylab = "Gross Consumption", xlab = "Days")
+     xlim = c(1, 100), main = "Gross Consumption forecast compared to Observations for the restricted Model1", ylab = "Gross Consumption", xlab = "Days")
 lines(consumption_prediction[1:100,1], col = "red")  # Mean forecast
 # Adjusting transparency of the confidence interval
 polygon(c(1:100, 100:1), c(consumption_prediction[1:100,3], rev(consumption_prediction[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
 lines(consumption_prediction[1:100,2], col = "navyblue")
 lines(consumption_prediction[1:100,3], col = "navyblue")
-legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
+legend("bottomright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.65)
 
 ###############################################################################
 ################################################################################
