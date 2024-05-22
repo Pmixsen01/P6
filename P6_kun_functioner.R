@@ -125,13 +125,13 @@ t <- 1:length(training_data_price$MeanPrice)
 st_price <- lm(training_data_price$MeanPrice ~ t 
                + sin(t*2*pi/7) + cos(t*2*pi/7)
                + sin(t*2*pi/30) + cos(t*2*pi/30) 
-               + sin(t*2*pi/180) + cos(t*2*pi/180) # halvårlig 182.5
+               + sin(t*2*pi/180) + cos(t*2*pi/180)
                + sin(t*2*pi/365) + cos(t*2*pi/365))
 # Now for the consumption
 st_consumption <- lm(training_data_consumption$DailyConsumption ~ t 
                      + sin(t*2*pi/7) + cos(t*2*pi/7)
                      + sin(t*2*pi/30) + cos(t*2*pi/30) 
-                     + sin(t*2*pi/180) + cos(t*2*pi/180) # halvårlig 182.5
+                     + sin(t*2*pi/180) + cos(t*2*pi/180) 
                      + sin(t*2*pi/365) + cos(t*2*pi/365))
 
 # Generate fitted values using the linear model
@@ -359,7 +359,7 @@ for (i in 1:20) {
 
 Model2 <- VAR(colle_ts_2, p = 7, type = "const", season = NULL, exog = NULL)
 restricted_model_2 <- restrict(Model2)
-
+summary(restricted_model_2)
 ##
 #predictions
 forecast_valres_2 <- predict(restricted_model_2, n.ahead = 366)
@@ -373,8 +373,8 @@ future_data_2 <- data.frame(
   i = future_i_2,
   sin_i_week = sin(future_i_2 * 2 * pi / 7),
   cos_i_week = cos(future_i_2 * 2 * pi / 7),
-  sin_i_monthly = sin(future_i_2 * 4 * pi / 30),
-  cos_i_monthly = cos(future_i_2 * 4 * pi / 30),
+  sin_i_monthly = sin(future_i_2 * 2 * pi / 30),
+  cos_i_monthly = cos(future_i_2 * 2 * pi / 30),
   sin_i_halfyearly = sin(future_i_2 * 2 * pi / 180),
   cos_i_halfyearly = cos(future_i_2 * 2 * pi / 180),
   sin_i_yearly = sin(future_i_2 * 2 * pi / 365),
@@ -409,3 +409,17 @@ consumption_ts_df <- data.frame(Date = time(consumption_ts), Actual = as.numeric
 
 # Merge data frames by Date
 plot_data <- merge(consumption_var_df, consumption_ts_df, by = "Date", all = TRUE)
+
+
+
+
+
+
+##################################
+# Calculate RMSE
+rmse <- sqrt(mean((price_prediction_2 - testing_data_price$MeanPrice)^2))
+print(paste("RMSE:", rmse))
+
+# Calculate MAE
+mae <- mean(abs(price_prediction_2 - testing_data_price$MeanPrice))
+print(paste("MAE:", mae))
