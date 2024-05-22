@@ -6,12 +6,12 @@ ggtsdisplay(price_ts, xlab = "Year", ylab = "Daily Prices", main = "Spot price f
 
 # plot of gross consumption time series
 plot(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Consumption, 2015-2020")
-ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption of electricity from 2015 through 2019")
+ggtsdisplay(consumption_ts, xlab = "Year", ylab = "Daily Consumption", main = "Gross consumption from 2015 through 2019")
 
 ############################################################################
 # plotting the ACF for the time series
-Acf(price_ts, lag.max = 60, main = "ACF of spot prices with lag 60")
-Acf(consumption_ts, lag.max = 60, main = "ACF of gross consumption with lag 60")
+Acf(price_ts, lag.max = 30, main = "ACF of spot prices with lag 30")
+Acf(consumption_ts, lag.max = 30, main = "ACF of gross consumption with lag 30")
 
 ############################################################################
 # plots of decomposition #MSTL
@@ -128,12 +128,10 @@ legend("bottomright", legend = c("Actual", "Forecast", "Confidence"), col = c("g
 ################################################################################
 # Breakpoint tests
 plot(price_ts, main = "Regime Shifts in Spot Prices", ylab = "Spot prices")
-lines(r1, col = "navyblue")
+lines(r1, col = "black")
 lines(r12, col = "red")
 legend("topright", legend = c("Breakpoints", "Confidence Intervals"), 
-       col = c("navyblue", "red"), lty = 1, cex = 0.6)
-
-
+       col = c("black", "red"), lty = 2:1, cex = 0.6)
 
 
 ############################################################################################################
@@ -205,7 +203,7 @@ lines(consumption_prediction_2[1:100,1], col = "red")  # Mean forecast
 polygon(c(1:100, 100:1), c(consumption_prediction_2[1:100,3], rev(consumption_prediction_2[1:100,2])), col = rgb(0, 0, 1, 0.2), border = NA)
 lines(consumption_prediction_2[1:100,2], col = "navyblue")
 lines(consumption_prediction_2[1:100,3], col = "navyblue")
-legend("topright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
+legend("bottomright", legend = c("Actual", "Forecast", "Confidence"), col = c("green4", "red", "navyblue"), lty = 1, cex = 0.75)
 
 #plot of VAR mdoels
 autoplot(price_var_2, main = "VAR prices")
@@ -234,5 +232,3 @@ ggplot(data = plot_data, aes(x = Date)) +
   scale_colour_manual(values = c("Fitted" = "red", "Actual" = "blue")) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5))
-
-
